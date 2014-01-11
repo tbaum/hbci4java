@@ -120,20 +120,20 @@ public final class CommPinTan
             conn.setReadTimeout(HTTP_READ_TIMEOUT);
             
             boolean checkCert=((AbstractPinTanPassport)getParentPassport()).getCheckCert();
-            boolean debugging=((PinTanSSLSocketFactory)this.mySocketFactory).debug();
+            boolean debugging = mySocketFactory instanceof PinTanSSLSocketFactory && ((PinTanSSLSocketFactory)mySocketFactory).debug();
             if (!checkCert || debugging) {
                 // if we have to disable cert checking or enable ssl logging,
                 // we have to set some special SSL stuff on the connection object
                 HttpsURLConnection connSSL=(HttpsURLConnection)conn;
                 
                 HBCIUtils.log("activating modified socket factory for"
-                    +" checkCert="+checkCert+" and debugging="+debugging, 
+                    +" checkCert="+checkCert+" and debugging="+debugging,
                     HBCIUtils.LOG_DEBUG);
                 connSSL.setSSLSocketFactory(this.mySocketFactory);
-                
+
                 if (!checkCert) {
                     // checkcert=0 --> use dummy hostname verifier that always succeeds
-                    HBCIUtils.log("activating modified hostname verifier because cert checking is disabled", 
+                    HBCIUtils.log("activating modified hostname verifier because cert checking is disabled",
                         HBCIUtils.LOG_DEBUG);
                     connSSL.setHostnameVerifier(this.myHostnameVerifier);
                 }
