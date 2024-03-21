@@ -1,23 +1,23 @@
-
-/*  $Id: AbstractPinTanPassport.java,v 1.6 2011/06/06 10:30:31 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.passport;
 
@@ -42,10 +42,13 @@ import org.kapott.hbci.dialog.HBCIMessageQueue;
 import org.kapott.hbci.dialog.KnownDialogTemplate;
 import org.kapott.hbci.dialog.KnownReturncode;
 import org.kapott.hbci.dialog.KnownTANProcess;
+import org.kapott.hbci.dialog.KnownTANProcess.Variant;
 import org.kapott.hbci.dialog.RawHBCIDialog;
+import org.kapott.hbci.dialog.SCARequest;
 import org.kapott.hbci.exceptions.HBCI_Exception;
 import org.kapott.hbci.exceptions.InvalidUserDataException;
 import org.kapott.hbci.manager.ChallengeInfo;
+import org.kapott.hbci.manager.Feature;
 import org.kapott.hbci.manager.HBCIDialog;
 import org.kapott.hbci.manager.HBCIHandler;
 import org.kapott.hbci.manager.HBCIKernelImpl;
@@ -53,6 +56,8 @@ import org.kapott.hbci.manager.HBCIKey;
 import org.kapott.hbci.manager.HBCIUser;
 import org.kapott.hbci.manager.HBCIUtils;
 import org.kapott.hbci.manager.HBCIUtilsInternal;
+import org.kapott.hbci.manager.HHDVersion;
+import org.kapott.hbci.manager.HHDVersion.Type;
 import org.kapott.hbci.manager.TanMethod;
 import org.kapott.hbci.protocol.SEG;
 import org.kapott.hbci.protocol.factory.SEGFactory;
@@ -61,19 +66,22 @@ import org.kapott.hbci.security.Sig;
 import org.kapott.hbci.status.HBCIMsgStatus;
 import org.kapott.hbci.status.HBCIRetVal;
 import org.kapott.hbci.structures.Konto;
-import org.kapott.hbci.tools.DigestUtils;
+import org.kapott.hbci.tools.CryptUtils;
 import org.kapott.hbci.tools.NumberUtil;
 import org.kapott.hbci.tools.ParameterFinder;
 import org.kapott.hbci.tools.ParameterFinder.Query;
 import org.kapott.hbci.tools.StringUtil;
 
+/**
+ * Abstrakte Basis-Implementierung des PIN/TAN-Supports.
+ */
 public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
 {
     /**
      * Hier speichern wir zwischen, ob wir eine HKTAN-Anfrage in der Dialog-Initialisierung gesendet haben und wenn ja, welcher Prozess-Schritt es war
      */
     private final static String CACHE_KEY_SCA_STEP = "__sca_step__";
-    
+
     /**
      * Hier speichern wir, ob wir eine SCA-Ausnahme fuer einen GV von der Bank erhalten haben
      */
@@ -94,25 +102,33 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
      */
     public final static String KEY_PD_ORDERREF = "__pintan_orderref___";
 
-    private String    certfile;
-    private boolean   checkCert;
+    /**
+     * Hier speichern wir zwischen, ob es sich um ein Decoupled-Verfahren handelt
+     */
+    public final static String KEY_PD_DECOUPLED = "__pintan_decoupled__";
 
-    private String    proxy;
-    private String    proxyuser;
-    private String    proxypass;
+    private String certfile;
+    private boolean checkCert;
 
-    private boolean   verifyTANMode;
+    private String proxy;
+    private String proxyuser;
+    private String proxypass;
+
+    private boolean verifyTANMode;
     
-    private String    currentTANMethod;
-    private boolean   currentTANMethodWasAutoSelected;
+    // Das aktuell ausgewaehlte TAN-Verfahren
+    private String tanMethod;
     
-    // Die IDs aller erlaubten TAN-Verfahren
-    private List<String> allowedTANMethods;
+    // True, wenn das aktuelle TAN-Verfahren automatisch gewaehlt wurde
+    private boolean tanMethodAutoSelected;
+    
+    // Die TAN-Verfahren fuer den User (aus dem 3920-Rueckmeldecode)
+    private List<String> tanMethodsUser;
 
-    // Die Map mit den BPDs zu den TAN-Verfahren
-    private Hashtable<String,Properties> twostepMechanisms;
+    // Die TAN-Verfahren mit den Parametern aus den BPD
+    private Hashtable<String,Properties> tanMethodsBank;
 
-    private String    pin;
+    private String pin;
     
     /**
      * ct.
@@ -121,8 +137,9 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
     public AbstractPinTanPassport(Object initObject)
     {
         super(initObject);
-        this.twostepMechanisms=new Hashtable<String, Properties>();
-        this.allowedTANMethods=new ArrayList<String>();
+
+        this.tanMethodsBank=new Hashtable<String, Properties>();
+        this.tanMethodsUser=new ArrayList<String>();
     }
     
     /**
@@ -144,7 +161,7 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
             // hier die liste der verfügbaren sicherheitsverfahren aus den
             // bpd (HITANS) extrahieren
 
-            twostepMechanisms.clear();
+            tanMethodsBank.clear();
             
             // willuhn 2011-06-06 Maximal zulaessige HITANS-Segment-Version ermitteln
             // Hintergrund: Es gibt User, die nur HHD 1.3-taugliche TAN-Generatoren haben,
@@ -184,7 +201,7 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
                             String secfunc=p.getProperty(key);
 
                             // willuhn 2011-05-13 Checken, ob wir das Verfahren schon aus einer aktuelleren Segment-Version haben
-                            Properties prev = twostepMechanisms.get(secfunc);
+                            Properties prev = tanMethodsBank.get(secfunc);
                             if (prev != null)
                             {
                               // Wir haben es schonmal. Mal sehen, welche Versionsnummer es hat
@@ -222,7 +239,7 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
                             }
 
                             // diesen mechanismus abspeichern
-                            twostepMechanisms.put(secfunc,entry);
+                            tanMethodsBank.put(secfunc,entry);
                         }
                     }
                 }
@@ -292,64 +309,48 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
      */
     private void check3920(DialogContext ctx)
     {
+        // In einem anonymen Dialog koennen keine 3920 enthalten sein, da die User-spezifisch sind
+        if (ctx.isAnonymous())
+            return;
+        
         HBCIMsgStatus status = ctx.getMsgStatus();
         if (status == null)
             return;
 
         ////////////////////////////////////////////////////
         // TAN-Verfahren ermitteln und uebernehmen
-        HBCIRetVal[] glob = status.globStatus != null ? status.globStatus.getWarnings() : null;
-        HBCIRetVal[] seg  = status.segStatus != null ? status.segStatus.getWarnings() : null;
-
-        if (glob == null && seg == null)
-            return;
-
-        HBCIUtils.log("autosecfunc: search for 3920 in response to detect allowed twostep secmechs", HBCIUtils.LOG_DEBUG);
-
-        List<HBCIRetVal> globRet = KnownReturncode.W3920.searchReturnValues(glob);
-        List<HBCIRetVal> segRet  = KnownReturncode.W3920.searchReturnValues(seg);
-
-        if (globRet == null && segRet == null)
-            return;
+        final List<HBCIRetVal> recvList = KnownReturncode.W3920.searchReturnValues(status);
         
-        final List<String> oldList = new ArrayList<String>(this.allowedTANMethods);
+        if (recvList == null || recvList.isEmpty())
+            return;
+
+        HBCIUtils.log("autosecfunc: found " + recvList.size() + " 3920s in response, detect allowed twostep secmechs", HBCIUtils.LOG_DEBUG);
+
+        final List<String> oldList = new ArrayList<String>(this.tanMethodsUser);
         final Set<String> newSet = new HashSet<String>(); // Damit doppelte nicht doppelt in der Liste landen
-        
-        if (globRet != null)
+        for (HBCIRetVal r:recvList)
         {
-            for (HBCIRetVal r:globRet)
-            {
-                if (r.params != null)
-                    newSet.addAll(Arrays.asList(r.params));
-            }
+          if (r.params != null)
+            newSet.addAll(Arrays.asList(r.params));
         }
-        if (segRet != null)
-        {
-            for (HBCIRetVal r:segRet)
-            {
-                if (r.params != null)
-                    newSet.addAll(Arrays.asList(r.params));
-            }
-        }
-        
         final List<String> newList = new ArrayList<String>(newSet);
 
         if (newList.size() > 0 && !newList.equals(oldList))
         {
-            this.allowedTANMethods.clear();
-            this.allowedTANMethods.addAll(newList);
-            HBCIUtils.log("autosecfunc: found 3920 in response - updated list of allowed twostepmechs - old: " + oldList + ", new: " + this.allowedTANMethods, HBCIUtils.LOG_DEBUG);
+            this.tanMethodsUser.clear();
+            this.tanMethodsUser.addAll(newList);
+            HBCIUtils.log("autosecfunc: found 3920 in response - updated list of allowed twostepmechs - old: " + oldList + ", new: " + this.tanMethodsUser, HBCIUtils.LOG_DEBUG);
         }
         //
         ////////////////////////////////////////////////////
         
         if (this.isAnonymous())
             return;
-
+        
         ////////////////////////////////////////////////////
         // Dialog neu starten, wenn das Verfahren sich geaendert hat
         // aktuelle secmech merken und neue auswählen (basierend auf evtl. gerade neu empfangenen informationen (3920s))
-        final String oldMethod = this.currentTANMethod;
+        final String oldMethod = this.tanMethod;
         final String newMethod = this.getCurrentTANMethod(true);
         
         if (Objects.equals(oldMethod,newMethod))
@@ -367,7 +368,6 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
         HBCIUtils.log("Derzeitiges TAN-Verfahren aktualisiert, starte Dialog neu", HBCIUtils.LOG_INFO);
         
         ctx.setRepeat(true);
-        //ctx.setDialogEnd(true);
         //
         ////////////////////////////////////////////////////
 
@@ -414,83 +414,57 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
             HBCIUtilsInternal.getCallback().callback(this,HBCICallback.USERID_CHANGED,"*** User ID changed",HBCICallback.TYPE_TEXT,retData);
         }
     }
-    
+
     /**
-     * Prueft, ob der Request um ein HKTAN erweitert werden muss.
+     * Prueft, ob die Dialog-Initialisierung um ein HKTAN erweitert werden muss.
      * @param ctx der Kontext.
      */
     private  void checkSCARequest(DialogContext ctx)
     {
-        final RawHBCIDialog init = ctx.getDialogInit();
-        if (init == null)
+        final SCARequest sca = this.getSCARequest(ctx);
+        if (sca == null)
             return;
-
-        // Checken, ob es ein Dialog, in dem eine SCA gemacht werden soll
-        if (!KnownDialogTemplate.LIST_SEND_SCA.contains(init.getTemplate()))
-            return;
-
-        final int segversionDefault = 6;
-        final String processDefault = "2";
         
-        /////////////////////////////////////////////////////////////////////////
-        // HKTAN-Version und Prozessvariante ermitteln - kann NULL sein
-        final Properties secmechInfo = this.getCurrentSecMechInfo();
-        
-//        // Wir haben keine TAN-Verfahren - dann koennen wir eh noch nichts ermitteln
-//        if (secmechInfo == null || secmechInfo.size() == 0)
-//            return;
+        Integer step = (Integer) ctx.getMeta().get(CACHE_KEY_SCA_STEP);
 
-        final int hktanVersion = secmechInfo != null ? NumberUtil.parseInt(secmechInfo.getProperty("segversion"),segversionDefault) : segversionDefault;
-        
-        // Erst ab HKTAN 6 noetig. Die Bank unterstuetzt es scheinbar noch nicht
-        // Siehe B.4.3.1 - Wenn die Bank HITAN < 6 geschickt hat, dann kann sie keine SCA
-        if (hktanVersion < 6)
-            return;
-
-        final String process = secmechInfo != null ? secmechInfo.getProperty("process",processDefault) : processDefault; // Prozessvariante (meist 2, gibt es ueberhaupt noch jemand mit 1?)
-        final boolean isP2 = process != null && process.equals("2");
-        //
-        /////////////////////////////////////////////////////////////////////////
-        
-        Integer scaStep = (Integer) ctx.getMeta().get(CACHE_KEY_SCA_STEP);
         // Wir haben noch kein HKTAN gesendet. Dann senden wir jetzt Schritt 1
-        if (scaStep == null)
-            scaStep = 1;
-
-        ctx.getMeta().put(CACHE_KEY_SCA_STEP,scaStep);
-
-        // Prozess-Variante 1 ist die mit den Schabloben und Challenge-Klassen
-        final boolean step2 = scaStep.intValue() == 2;
-        final KnownTANProcess tp = isP2 ? (step2 ? KnownTANProcess.PROCESS2_STEP2 : KnownTANProcess.PROCESS2_STEP1) : KnownTANProcess.PROCESS1;
-        
-        final HBCIKernelImpl k = ctx.getKernel();
-        
-        final String prefix = "TAN2Step" + hktanVersion;
-        
-        // wir fuegen die Daten des HKTAN ein
-        k.rawSet(prefix,"requested"); // forcieren, dass das Segment mit gesendet wird - auch wenn es eigentlich optional ist
-        k.rawSet(prefix + ".process",tp.getCode());
-        
-        // Beim Bezug auf das Segment schicken wir per Default "HKIDN". Gemaess Kapitel B.4.3.1 muss das Bezugssegment aber
-        // bei PIN/TAN-Management-Geschaeftsvorfaellen mit dem GV des jeweiligen Geschaeftsvorfalls belegt werden.
-        // Daher muessen wir im Payload schauen, ob ein entsprechender Geschaeftsvorfall enthalten ist.
-        // Wird muessen nur nach HKPAE, HKTAB schauen - das sind die einzigen beiden, die wir unterstuetzen
-        String segcode = "HKIDN";
-        HBCIDialog payload = ctx.getDialog();
-        if (payload != null)
+        if (step == null)
         {
-            final HBCIMessageQueue queue = payload.getMessageQueue();
-            for (String code:Arrays.asList("HKPAE","HKTAB")) // Das sind GVChangePIN und GVTANMediaList
-            {
-                if (queue.findTask(code) != null)
-                {
-                    segcode = code;
-                    break;
-                }
-            }
+          step = 1;
+          ctx.getMeta().put(CACHE_KEY_SCA_STEP,step);
+        }
+
+        final Variant variant = sca.getVariant();
+        KnownTANProcess tp = KnownTANProcess.get(variant,step.intValue());
+
+        // Checken, ob wir Decoupled verwenden. In dem Fall
+        // TAN-Prozess von "2" auf "S" ändern
+        if (tp == KnownTANProcess.PROCESS2_STEP2)
+        {
+          final String dec = (String) ctx.getPassport().getPersistentData(KEY_PD_DECOUPLED);
+          if (dec != null && dec.length() > 0)
+          {
+            tp = KnownTANProcess.PROCESS2_STEPS;
+            ctx.getPassport().setPersistentData(KEY_PD_DECOUPLED,null);
+          }
         }
         
-        HBCIUtils.log("creating " + (step2 ? "2nd" : "1st") + " HKTAN for SCA [process variant: " + process + ", process number: " + tp.getCode() + ", order code: " + segcode + "]",HBCIUtils.LOG_DEBUG);
+        final int version = sca.getVersion();
+        
+        // wir fuegen die Daten des HKTAN ein
+        final HBCIKernelImpl k = ctx.getKernel();
+        final String prefix = "TAN2Step" + version;
+        k.rawSet(prefix,"requested"); // forcieren, dass das Segment mit gesendet wird - auch wenn es eigentlich optional ist
+        k.rawSet(prefix + ".process",tp.getCode());
+
+
+        String segcode = sca.getTanReference();
+        if (Feature.PINTAN_SEGCODE_STRICT.isEnabled())
+        {
+          if (step == 2)
+            segcode = "";
+        }
+        HBCIUtils.log("creating HKTAN for SCA [process : " + tp + ", order code: " + segcode + ", step: " + step + "]",HBCIUtils.LOG_DEBUG);
         
         k.rawSet(prefix + ".ordersegcode",segcode);
         k.rawSet(prefix + ".OrderAccount.bic","");
@@ -499,11 +473,95 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
         k.rawSet(prefix + ".OrderAccount.subnumber","");
         k.rawSet(prefix + ".OrderAccount.KIK.blz","");
         k.rawSet(prefix + ".OrderAccount.KIK.country","");
-        k.rawSet(prefix + ".orderhash",isP2 ? "" : ("B00000000"));
-        k.rawSet(prefix + ".orderref",step2 ? (String) this.getPersistentData(KEY_PD_ORDERREF) : "");
-        k.rawSet(prefix + ".notlasttan","N");
-        k.rawSet(prefix + ".challengeklass",isP2 ? "" : "99");
-        k.rawSet(prefix + ".tanmedia",this.getTanMedia(hktanVersion));
+        k.rawSet(prefix + ".orderhash",(variant == Variant.V2) ? "" : ("B00000000"));
+        k.rawSet(prefix + ".orderref",(step == 2) ? (String) this.getPersistentData(KEY_PD_ORDERREF) : "");
+        k.rawSet(prefix + ".notlasttan",(tp == KnownTANProcess.PROCESS1 || step == 2) ? "N" : ""); // Darf nur bei TAN-Prozess 1, 2 und S belegt sein
+        k.rawSet(prefix + ".challengeklass",(variant == Variant.V2) ? "" : "99");
+        k.rawSet(prefix + ".tanmedia",sca.getTanMedia());
+    }
+    
+    /**
+     * Erzeugt einen passenden SCA-Request fuer die Dialog-Initialisierung.
+     * @param ctx der Context.
+     * @return der SCA-Request oder NULL, wenn keiner noetig ist.
+     */
+    private SCARequest getSCARequest(DialogContext ctx)
+    {
+        final RawHBCIDialog init = ctx.getDialogInit();
+        if (init == null)
+            return null;
+
+        // Checken, ob es ein Dialog, in dem eine SCA gemacht werden soll
+        if (!KnownDialogTemplate.LIST_SEND_SCA.contains(init.getTemplate()))
+            return null;
+
+        if (Feature.PINTAN_INIT_SKIPONESTEPSCA.isEnabled())
+        {
+            // Wenn wir ein Einschritt-TAN-Verfahren haben und es die autorisierte Initialisierung ist,
+            // dann senden wir das Init ohne HKTAN. Im anonymen Init haben wir ja schon per HKTAN mitgeteilt, dass
+            // wir SCA koennen. Jetzt gehts uns nur darum, die TAN-Verfahren per 3920 zu kriegen
+            // Ist nach Abstimmung mit einem HBCI-Server-Experten so legitim und wird von allen so gemacht:
+            // Bei Dialog-Init Verfahren 999 nehmen und ohne HKTAN senden
+            // Laut https://homebanking-hilfe.de/forum/topic.php?p=149751#real149751 akzeptiert die DKB kein Sync mit 999
+            //
+            //  Dialog                                   HKTAN weglassen?
+            //  ---------------------------------------------------------
+            //  DialogInitAnon                           nein
+            //  DialogInit mit Einschritt-TAN            ja
+            //  DialogInit mit Zweischritt-TAN           nein
+            //  Sync                                     nein
+            //  Sync mit aktiviertem Init-Flip           ja
+          
+            final KnownDialogTemplate tpl = init.getTemplate();
+            if (!ctx.isAnonymous() && Objects.equals(TanMethod.ONESTEP.getId(),this.getCurrentTANMethod(false)) && 
+                (tpl == KnownDialogTemplate.INIT || (Feature.INIT_FLIP_USER_INST.isEnabled() && tpl == KnownDialogTemplate.SYNC)))
+            {
+                HBCIUtils.log("skipping HKTAN for dialog init",HBCIUtils.LOG_DEBUG);
+                return null;
+            }
+        }
+
+        // HKTAN-Version und Prozessvariante ermitteln - kann NULL sein
+        final int segversionDefault = 6;
+        final Properties secmechInfo = this.getCurrentSecMechInfo();
+
+        final int hktanVersion = secmechInfo != null ? NumberUtil.parseInt(secmechInfo.getProperty("segversion"),segversionDefault) : segversionDefault;
+        
+        // Erst ab HKTAN 6 noetig. Die Bank unterstuetzt es scheinbar noch nicht
+        // Siehe B.4.3.1 - Wenn die Bank HITAN < 6 geschickt hat, dann kann sie keine SCA
+        if (hktanVersion < 6)
+            return null;
+
+        final SCARequest r = init.createSCARequest(secmechInfo,hktanVersion);
+        if (r == null)
+          return null;
+        
+        if (r.getTanReference() == null)
+        {
+            // Beim Bezug auf das Segment schicken wir per Default "HKIDN". Gemaess Kapitel B.4.3.1 muss das Bezugssegment aber
+            // bei PIN/TAN-Management-Geschaeftsvorfaellen mit dem GV des jeweiligen Geschaeftsvorfalls belegt werden.
+            // Daher muessen wir im Payload schauen, ob ein entsprechender Geschaeftsvorfall enthalten ist.
+            // Wird muessen nur nach HKPAE, HKTAB schauen - das sind die einzigen beiden, die wir unterstuetzen
+            String segcode = "HKIDN";
+            HBCIDialog payload = ctx.getDialog();
+            if (payload != null)
+            {
+                final HBCIMessageQueue queue = payload.getMessageQueue();
+                for (String code:Arrays.asList("HKPAE","HKTAB")) // Das sind GVChangePIN und GVTANMediaList
+                {
+                    if (queue.findTask(code) != null)
+                    {
+                        segcode = code;
+                        break;
+                    }
+                }
+            }
+            r.setTanReference(segcode);
+        }
+        if (r.getTanMedia() == null)
+            r.setTanMedia(this.getTanMedia(hktanVersion));
+        
+        return r;
     }
 
     /**
@@ -608,54 +666,13 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
      */
     public boolean isSupported()
     {
-        boolean ret=false;
-        Properties bpd=getBPD();
-        
-        if (bpd!=null && bpd.size()!=0) {
-            // loop through bpd and search for PinTanPar segment
-            for (Enumeration e=bpd.propertyNames();e.hasMoreElements();) {
-                String key=(String)e.nextElement();
-                
-                if (key.startsWith("Params")) {
-                    int posi=key.indexOf(".");
-                    if (key.substring(posi+1).startsWith("PinTanPar")) {
-                        ret=true;
-                        break;
-                    }
-                }
-            }
-            
-            if (ret) {
-                // prüfen, ob gewähltes sicherheitsverfahren unterstützt wird
-                // autosecmech: hier wird ein flag uebergeben, das anzeigt, dass getCurrentTANMethod()
-                // hier evtl. automatisch ermittelte secmechs neu verifzieren soll
-                String current=getCurrentTANMethod(true);
-                
-                if (current.equals(TanMethod.ONESTEP.getId())) {
-                    // einschrittverfahren gewählt
-                    if (!isOneStepAllowed()) {
-                        HBCIUtils.log("not supported: onestep method not allowed by BPD",HBCIUtils.LOG_ERR);
-                        ret=false;
-                    } else {
-                        HBCIUtils.log("supported: pintan-onestep",HBCIUtils.LOG_DEBUG);
-                    }
-                } else {
-                    // irgendein zweischritt-verfahren gewählt
-                    Properties entry=twostepMechanisms.get(current);
-                    if (entry==null) {
-                        // es gibt keinen info-eintrag für das gewählte verfahren
-                        HBCIUtils.log("not supported: twostep-method "+current+" selected, but this is not supported",HBCIUtils.LOG_ERR);
-                        ret=false;
-                    } else {
-                        HBCIUtils.log("selected twostep-method "+current+" ("+entry.getProperty("name")+") is supported",HBCIUtils.LOG_DEBUG);
-                    }
-                }
-            }
-        } else {
-            ret=true;
-        }
-        
-        return ret;
+      final Properties bpd = this.getBPD();
+      if (bpd == null)
+        return true;
+
+      // Wir triggern hier nur einmal die Auswahl des TAN-Verfahrens
+      this.getCurrentTANMethod(true);
+      return true;
     }
     
     /**
@@ -676,9 +693,9 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
      * neu vom Server abgeholt wird und evtl. neu vom Nutzer abgefragt wird. */
     public void resetSecMechs()
     {
-        this.allowedTANMethods=new ArrayList<String>();
-        this.currentTANMethod=null;
-        this.currentTANMethodWasAutoSelected=false;
+        this.tanMethodsUser=new ArrayList<String>();
+        this.tanMethod=null;
+        this.tanMethodAutoSelected=false;
     }
     
     /**
@@ -687,9 +704,9 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
      */
     public void setCurrentTANMethod(String method)
     {
-        this.currentTANMethod=method;
+        this.tanMethod=method;
     }
-    
+
     /**
      * Liefert das aktuelle TAN-Verfahren.
      * @param recheck true, wenn die gespeicherte Auswahl auf Aktualitaet und Verfuegbarkeit geprueft werden soll.
@@ -699,12 +716,118 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
     public String getCurrentTANMethod(boolean recheck)
     {
         // Wir haben ein aktuelles TAN-Verfahren und eine Neupruefung ist nicht noetig
-        if (this.currentTANMethod != null && !recheck)
-            return this.currentTANMethod;
-        
-        
-        HBCIUtils.log("(re)checking selected pintan method", HBCIUtils.LOG_DEBUG);
+        if (this.tanMethod != null && !recheck)
+            return this.tanMethod;
 
+        boolean auto = Feature.PINTAN_INIT_AUTOMETHOD.isEnabled();
+        HBCIUtils.log("(re)checking selected pintan method using " + (auto ? "auto-determine" : "ask") + " strategy", HBCIUtils.LOG_DEBUG);
+
+        if (auto)
+            return this.determineTanMethod();
+        
+        return this.askForTanMethod();
+    }
+
+    /**
+     * Liefert das aktuelle TAN-Verfahren.
+     * Hierbei versucht HBCI4Java das Verfahren erst automatisch zu ermitteln, bevor es den User fragt.
+     * @return das TAN-Verfahren.
+     */
+    private String determineTanMethod()
+    {
+        // Wenn der User noch keine TAN-Verfahren hat, bleibt und als Option nur 999 - also Einschritt-Verfahren, um an den 3920
+        // mit den zulaessigen Verfahren zu kommen. Wir pruefen hier gar nicht erst per "isOneStepAllowed", ob die Bank ein
+        // Einschritt-Verfahren anbietet, weil wir gar keine andere Option haben
+        // Update 2019-11-02: Geht bei der Postbank leider nicht. Die erlauben kein Einschritt-Vefahren und wollen daher
+        // tatsaechlich bereits beim Abruf der verfuegbaren TAN-Verfahren ein Zweischritt-Verfahren haben. Siehe 
+        // https://homebanking-hilfe.de/forum/topic.php?p=151725#real151725
+        if (this.tanMethodsUser.size() == 0 && this.isOneStepAllowed())
+            return TanMethod.ONESTEP.getId();
+        
+        /////////////////////////////////////////
+        // Die Liste der verfuegbaren Optionen ermitteln
+        final List<TanMethod> userList = new ArrayList<TanMethod>();
+        final List<TanMethod> bankList = new ArrayList<TanMethod>();
+
+        String[] secfuncs= this.tanMethodsBank.keySet().toArray(new String[this.tanMethodsBank.size()]);
+        Arrays.sort(secfuncs);
+        for (String secfunc:secfuncs)
+        {
+            final Properties entry = this.tanMethodsBank.get(secfunc);
+            final TanMethod m = new TanMethod(secfunc,entry.getProperty("name"));
+            if (this.tanMethodsUser.contains(secfunc))
+                userList.add(m);
+            bankList.add(m);
+        }
+        //
+        /////////////////////////////////////////
+
+        HBCIUtils.log("tan methods of institute: " + bankList, HBCIUtils.LOG_DEBUG);
+        HBCIUtils.log("tan methods for user: " + userList, HBCIUtils.LOG_DEBUG);
+
+        /////////////////////////////////////////
+        // Auswahl treffen
+        
+        if (userList.size() == 0)
+        {
+          if (this.isOneStepAllowed())
+          {
+            final TanMethod m = TanMethod.ONESTEP;
+            HBCIUtils.log("no tan method available for user, using: " + m,HBCIUtils.LOG_DEBUG);
+            // Wir speichern das TAN-Verfahren nicht, das kann unmoeglich das finale Verfahren sein.
+            return m.getId();
+          }
+          else
+          {
+            // Sonderfall HBCI4Java Testserver. Der liefert gar keine TAN-Verfahren
+            if (bankList.size() == 0)
+            {
+              final TanMethod m = TanMethod.ONESTEP;
+              HBCIUtils.log("no tan method available for bank, using: " + m,HBCIUtils.LOG_DEBUG);
+              // Wir speichern das TAN-Verfahren nicht, das kann unmoeglich das finale Verfahren sein.
+              return m.getId();
+            }
+            
+            // Das ist sicher die Postbank. Wir haben noch kein Verfahren per 3920 erhalten, die Bank erlaubt
+            // aber nicht, diese per Einschritt-Verfahren abzurufen. Also muessen wir den User bitten, die Auswahl
+            // aus der in den BPD verfuegbaren Verfahren zu treffen. Auch wenn diese Liste dann Eintraege enthaelt,
+            // die fuer den User u.U. gar nicht verfuegbar sind.
+            HBCIUtils.log("have no methods for user and institute doesn't allow one step method - asking user. available methods on institute: " + bankList,HBCIUtils.LOG_DEBUG);
+            this.setCurrentTANMethod(this.chooseTANMethod(bankList));
+            HBCIUtils.log("selected pintan method by user: " + tanMethod, HBCIUtils.LOG_INFO);
+            return this.tanMethod;
+          }
+        }
+        
+        if (userList.size() == 1)
+        {
+            final TanMethod m = userList.get(0);
+            HBCIUtils.log("only one tan method available for user: " + m,HBCIUtils.LOG_DEBUG);
+            this.setCurrentTANMethod(m.getId()); // Ueberschreibt bei der Gelegenheit gleich die letzte Version
+            return this.tanMethod;
+        }
+        
+        // Wir haben mehrere zur Auswahl. Checken, ob wir schon eins hatten. Und wenn ja, ob es
+        // immer noch verfuegbar ist. Wenn ja, liefern wir einfach das zurueck. Wenn es nicht
+        // mehr verfuegbar ist, muessen wir den User neu fragen.
+        boolean reuse = this.tanMethod != null && userList.stream().anyMatch(m -> Objects.equals(m.getId(),this.tanMethod));
+        if (reuse)
+            return this.tanMethod;
+        
+        // User fragen
+        HBCIUtils.log("asking user what tan method to use. available methods: " + userList,HBCIUtils.LOG_DEBUG);
+        this.setCurrentTANMethod(this.chooseTANMethod(userList));
+        HBCIUtils.log("selected pintan method by user: " + tanMethod, HBCIUtils.LOG_INFO);
+        return this.tanMethod;
+    }
+
+    /**
+     * Liefert das aktuelle TAN-Verfahren.
+     * Fragt hierbei im Zweifelsfall eher den User anstatt es selbst herauszufinden.
+     * @return das TAN-Verfahren.
+     */
+    private String askForTanMethod()
+    {
         /////////////////////////////////////////
         // Die Liste der verfuegbaren Optionen ermitteln
         final List<TanMethod> options = new ArrayList<TanMethod>();
@@ -715,18 +838,18 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
         {
             TanMethod m = TanMethod.ONESTEP;
             // Nur hinzufuegen, wenn wir entweder gar keine erlaubten haben oder es in der Liste der erlaubten drin ist
-            if (this.allowedTANMethods.size() == 0 || this.allowedTANMethods.contains(m.getId()))
+            if (this.tanMethodsUser.size() == 0 || this.tanMethodsUser.contains(m.getId()))
                 options.add(m);
         }
         
         // Die Zweischritt-Verfahren hinzufuegen
-        String[] secfuncs= this.twostepMechanisms.keySet().toArray(new String[this.twostepMechanisms.size()]);
+        String[] secfuncs= this.tanMethodsBank.keySet().toArray(new String[this.tanMethodsBank.size()]);
         Arrays.sort(secfuncs);
         for (String secfunc:secfuncs)
         {
-            final Properties entry = this.twostepMechanisms.get(secfunc);
+            final Properties entry = this.tanMethodsBank.get(secfunc);
             final TanMethod m = new TanMethod(secfunc,entry.getProperty("name"));
-            if (this.allowedTANMethods.contains(secfunc))
+            if (this.tanMethodsUser.size() == 0 || this.tanMethodsUser.contains(secfunc))
             {
                 options.add(m);
             }
@@ -745,7 +868,7 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
             // wir lassen das hier mal noch auf true stehen, weil das bestimmt noch nicht final war. Schliesslich basierte die
             // Auswahl des Verfahrens nicht auf den fuer den User freigeschalteten Verfahren sondern nur den allgemein von der
             // Bank unterstuetzten
-            this.currentTANMethodWasAutoSelected = true;
+            this.tanMethodAutoSelected = true;
             
             HBCIUtils.log("autosecfunc: no information about allowed pintan methods available", HBCIUtils.LOG_INFO);
             // Wir haben keine TAN-Verfahren, die fuer den User per 3920 zugelassen sind.
@@ -756,7 +879,7 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
                 HBCIUtils.log("autosecfunc: have some pintan methods in HIPINS, asking user, what to use from: " + fallback, HBCIUtils.LOG_INFO);
                 final String selected = this.chooseTANMethod(fallback);
                 this.setCurrentTANMethod(selected);
-                HBCIUtils.log("autosecfunc: manually selected pintan method from HIPINS " + currentTANMethod, HBCIUtils.LOG_DEBUG);
+                HBCIUtils.log("autosecfunc: manually selected pintan method from HIPINS " + tanMethod, HBCIUtils.LOG_DEBUG);
             }
             else
             {
@@ -765,7 +888,7 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
                 this.setCurrentTANMethod(m.getId());
             }
             
-            return this.currentTANMethod;
+            return this.tanMethod;
         }
         //
         /////////////////////////////////////////
@@ -779,13 +902,13 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
             
             HBCIUtils.log("autosecfunc: there is only one pintan method supported - choosing this automatically: " + m,HBCIUtils.LOG_DEBUG);
             
-            if (this.currentTANMethod != null && !this.currentTANMethod.equals(m.getId()))
-                HBCIUtils.log("autosecfunc: auto-selected method differs from current: " + this.currentTANMethod, HBCIUtils.LOG_DEBUG);
+            if (this.tanMethod != null && !this.tanMethod.equals(m.getId()))
+                HBCIUtils.log("autosecfunc: auto-selected method differs from current: " + this.tanMethod, HBCIUtils.LOG_DEBUG);
             
             this.setCurrentTANMethod(m.getId());
-            this.currentTANMethodWasAutoSelected = true;
+            this.tanMethodAutoSelected = true;
             
-            return this.currentTANMethod;
+            return this.tanMethod;
         }
         //
         /////////////////////////////////////////
@@ -795,20 +918,20 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
         // Mehrere Optionen verfuegbar
 
         // Checken, was gerade eingestellt ist.
-        if (this.currentTANMethod != null)
+        if (this.tanMethod != null)
         {
             boolean found = false;
             for (TanMethod m:options)
             {
-                found |= this.currentTANMethod.equals(m.getId());
+                found |= this.tanMethod.equals(m.getId());
                 if (found)
                     break;
             }
             
             if (!found)
             {
-                HBCIUtils.log("autosecfunc: currently selected pintan method ("+this.currentTANMethod+") not in list of supported methods  " + options + " - resetting current selection", HBCIUtils.LOG_DEBUG);
-                this.currentTANMethod = null;
+                HBCIUtils.log("autosecfunc: currently selected pintan method ("+this.tanMethod+") not in list of supported methods  " + options + " - resetting current selection", HBCIUtils.LOG_DEBUG);
+                this.tanMethod = null;
             }
         }
         //
@@ -816,17 +939,20 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
 
         // Wenn wir jetzt immer noch ein Verfahren haben und dieses nicht automatisch gewaehlt wurde, dann
         // duerfen wir es verwenden.
-        if (this.currentTANMethod != null && !this.currentTANMethodWasAutoSelected)
-            return this.currentTANMethod;
+        if (this.tanMethod != null && !this.tanMethodAutoSelected)
+            return this.tanMethod;
         
-        // User fragen
-        HBCIUtils.log("autosecfunc: asking user what tan method to use. available methods: " + options,HBCIUtils.LOG_DEBUG);
-        final String selected = this.chooseTANMethod(options);
-          
-        this.setCurrentTANMethod(selected);
-        this.currentTANMethodWasAutoSelected = false;
-        HBCIUtils.log("autosecfunc: manually selected pintan method "+currentTANMethod, HBCIUtils.LOG_DEBUG);
-        return currentTANMethod;
+        // User fragen - aber nur, wenn wir was zum Auswahlen haben
+        if (options != null && options.size() > 0)
+        {
+            HBCIUtils.log("autosecfunc: asking user what tan method to use. available methods: " + options,HBCIUtils.LOG_DEBUG);
+            final String selected = this.chooseTANMethod(options);
+              
+            this.setCurrentTANMethod(selected);
+            this.tanMethodAutoSelected = false;
+            HBCIUtils.log("autosecfunc: manually selected pintan method "+tanMethod, HBCIUtils.LOG_DEBUG);
+        }
+        return tanMethod;
     }
     
     /**
@@ -861,12 +987,12 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
     
     public Properties getCurrentSecMechInfo()
     {
-        return twostepMechanisms.get(getCurrentTANMethod(false));
+        return tanMethodsBank.get(getCurrentTANMethod(false));
     }
     
     public Hashtable<String, Properties> getTwostepMechanisms()
     {
-    	return twostepMechanisms;
+    	return tanMethodsBank;
     }
 
     public String getProfileMethod()
@@ -1277,9 +1403,9 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
         final String s = ParameterFinder.getValue(bpd,Query.BPD_PINTAN_ORDERHASHMODE.withParameters((segVersion != null ? segVersion : "")),null);
         
         if ("1".equals(s))
-            return DigestUtils.ALG_RIPE_MD160;
+            return CryptUtils.HASH_ALG_RIPE_MD160;
         if ("2".equals(s))
-            return DigestUtils.ALG_SHA1;
+            return CryptUtils.HASH_ALG_SHA1;
                     
         throw new HBCI_Exception("unknown orderhash mode " + s);
     }
@@ -1400,7 +1526,7 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
                         seg.validate();
                         final String segdata = seg.toString(0);
                         HBCIUtils.log("calculating hash for jobsegment: " + segdata,HBCIUtils.LOG_DEBUG2);
-                        hktan.setParam("orderhash",DigestUtils.hash(segdata,this.getOrderHashMode()));
+                        hktan.setParam("orderhash",CryptUtils.hash(segdata,this.getOrderHashMode()));
                     }
                     finally
                     {
@@ -1428,10 +1554,20 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
                     
                     // Neue Nachricht fuer das zweite HKTAN
                     HBCIUtils.log("process variant 2: creating new msg with HKTAN(p=2,orderref=DELAYED)",HBCIUtils.LOG_DEBUG);
-                    
-                    // HKTAN-job für das einreichen der TAN erzeugen
+
+                    // Decoupled Verfahren - Sonderbehandlung bei TAN-Prozess 2
+                    KnownTANProcess proc = KnownTANProcess.PROCESS2_STEP2;
+                    final HHDVersion hhd = HHDVersion.find(secmechInfo);
+                    HBCIUtils.log("detected HHD version: " + hhd,HBCIUtils.LOG_DEBUG);
+                    if (hhd.getType() == Type.DECOUPLED)
+                    {
+                      HBCIUtils.log("using decoupled hktan for step 2",HBCIUtils.LOG_DEBUG);
+                      proc = KnownTANProcess.PROCESS2_STEPS;
+                    }
+
+                    // HKTAN-job für das Einreichen der TAN erzeugen
                     final GVTAN2Step hktan2 = (GVTAN2Step) handler.newJob("TAN2Step");
-                    hktan2.setProcess(KnownTANProcess.PROCESS2_STEP2);
+                    hktan2.setProcess(proc);
                     hktan2.setExternalId(task.getExternalId()); // externe ID auch an HKTAN2 durchreichen
                     hktan2.setSegVersion(segversion);
                     hktan2.setParam("notlasttan","N");
@@ -1464,43 +1600,33 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
     {
         // Gibts erst ab hhd1.3, siehe
         // FinTS_3.0_Security_Sicherheitsverfahren_PINTAN_Rel_20101027_final_version.pdf, Kapitel B.4.3.1.1.1
-        // Zitat: Ist in der BPD als Anzahl unterstützter aktiver TAN-Medien ein Wert > 1
-        //        angegeben und ist der BPD-Wert für Bezeichnung des TAN-Mediums erforderlich = 2,
-        //        so muss der Kunde z. B. im Falle des mobileTAN-Verfahrens
-        //        hier die Bezeichnung seines für diesen Auftrag zu verwendenden TAN-
-        //        Mediums angeben.
-        // Ausserdem: "Nur bei TAN-Prozess=1, 3, 4". Das muess aber der Aufrufer pruefen. Ist mir
-        // hier zu kompliziert
         HBCIUtils.log("HKTAN version: " + segVersion,HBCIUtils.LOG_DEBUG);
         if (segVersion < 3)
             return "";
 
-        Properties  secmechInfo = getCurrentSecMechInfo();
-        
-        // Anzahl aktiver TAN-Medien ermitteln
-        String needed = secmechInfo != null ? secmechInfo.getProperty("needtanmedia","") : "";
+        final Properties  secmechInfo = this.getCurrentSecMechInfo();
+
+        // Brauchen wir ein TAN-Medium?
+        final String needed = secmechInfo != null ? secmechInfo.getProperty("needtanmedia","") : "";
         HBCIUtils.log("needtanmedia: " + needed,HBCIUtils.LOG_DEBUG);
     
-        // Ich hab Mails von Usern erhalten, bei denen die Angabe des TAN-Mediums auch
-        // dann noetig war, wenn nur eine Handy-Nummer hinterlegt war. Daher loggen wir
-        // "num" nur, bringen die Abfrage jedoch schon bei num<2 - insofern needed=2.
-        
-        String result = "";
-        final Properties upd = this.getUPD();
-        final boolean tn = needed.equals("2");
-        if (tn)// && upd != null && upd.size() > 0)
+        final boolean tn = Objects.equals(needed,"2");
+        if (tn)
         {
             HBCIUtils.log("we have to add the tan media",HBCIUtils.LOG_DEBUG);
     
-            StringBuffer retData=new StringBuffer();
+            final StringBuffer retData = new StringBuffer();
+            
+            // Namen der TAN-Medien als Auswahl anbieten, falls vorhanden
+            final Properties upd = this.getUPD();
             if (upd != null)
                 retData.append(upd.getProperty(HBCIUser.UPD_KEY_TANMEDIA,""));
+            
             HBCIUtilsInternal.getCallback().callback(this,HBCICallback.NEED_PT_TANMEDIA,"*** Enter the name of your TAN media",HBCICallback.TYPE_TEXT,retData);
-            result = retData.toString();
+            final String result = retData.toString();
+            if (StringUtil.hasText(result))
+                return result;
         }
-
-        if (result != null && result.length() > 0)
-            return result;
         
         // Seit HKTAN 6: Wenn die Angabe eines TAN-Mediennamens laut BPD erforderlich ist, wir aber gar keinen Namen haben,
         // dann "noref" eintragen.
@@ -1524,12 +1650,12 @@ public abstract class AbstractPinTanPassport extends AbstractHBCIPassport
     
     public List<String> getAllowedTwostepMechanisms() 
     {
-        return this.allowedTANMethods;
+        return this.tanMethodsUser;
     }
     
     public void setAllowedTwostepMechanisms(List<String> l)
     {
-        this.allowedTANMethods=l;
+        this.tanMethodsUser=l;
     }
     
     public int getMaxGVSegsPerMsg()

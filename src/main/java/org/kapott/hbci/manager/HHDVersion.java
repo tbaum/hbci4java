@@ -1,7 +1,21 @@
 /**********************************************************************
  *
- * Copyright (c) by Olaf Willuhn
- * All rights reserved
+ * This file is part of HBCI4Java.
+ * Copyright (c) Olaf Willuhn
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  **********************************************************************/
 
@@ -45,14 +59,19 @@ public enum HHDVersion
      * dass dann nicht Matrix-Code ist.
      * Generell unterstuetzen wir nur server-seitig generierte Matrix-Codes.
      */
-    MS_1(Type.PHOTOTAN,"MS1.*",null,-1,"hhd14"),
+    MS_1(Type.PHOTOTAN,"MS1.*|photoTAN.*",null,-1,"hhd14"),
 
     /**
      * HHD-Version 1.2.
      * Fallback.
      */
     HHD_1_2(Type.CHIPTAN,null,null,-1,"hhd12"),
-    
+
+    /**
+     * Push-TAN 2.0 (Decoupled)
+     */
+    DECOUPLED(Type.DECOUPLED,"Decouple.*"),
+
     ;
     
     /**
@@ -73,15 +92,33 @@ public enum HHDVersion
         /**
          * QR-Code.
          */
-        QRCODE
+        QRCODE,
+        
+        /**
+         * Push-TAN 2.0 (Decoupled)
+         */
+        DECOUPLED
+
     }
-    
+
     private Type type = null;
+    private String nameMatch = null;
     private String idMatch = null;
     private String versionStart = null;
     private int segVersion = 0;
     private String challengeVersion = null;
-    
+
+    /**
+     * ct.
+     * @param type die Art des TAN-Verfahrens.
+     * @param nameMatch Pattern für DK-Verfahrensbezeichnung.
+     */
+    private HHDVersion(Type type, String nameMatch)
+    {
+      this.type = type;
+      this.nameMatch = nameMatch;
+    }
+
     /**
      * ct.
      * @param type die Art des TAN-Verfahrens.
@@ -127,6 +164,25 @@ public enum HHDVersion
     public static HHDVersion find(Properties secmech)
     {
       HBCIUtils.log("trying to determine HHD version for secmech: " + secmech,HBCIUtils.LOG_DEBUG);
+
+      // DK-TAN-Verfahren
+      String name = secmech.getProperty("zkamethod_name","");
+      if (name != null && name.length() > 0)
+      {
+        HBCIUtils.log("  DK name: " + name,HBCIUtils.LOG_DEBUG);
+        for (HHDVersion v:values())
+        {
+            String s = v.nameMatch;
+            if (s == null)
+                continue;
+            if (name.matches(s))
+            {
+                HBCIUtils.log("  identified as " + v,HBCIUtils.LOG_DEBUG);
+                return v;
+            }
+        }
+      }
+      
       // Das ist die "Technische Kennung"
       // Siehe "Belegungsrichtlinien TANve1.4  mit Erratum 1-3 final version vom 2010-11-12.pdf"
       // Der Name ist standardisiert, wenn er mit "HHD1...." beginnt, ist

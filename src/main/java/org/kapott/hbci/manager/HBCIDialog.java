@@ -1,23 +1,23 @@
-
-/*  $Id: HBCIDialog.java,v 1.1 2011/05/04 22:37:46 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.manager;
 
@@ -33,6 +33,7 @@ import org.kapott.hbci.dialog.DialogEvent;
 import org.kapott.hbci.dialog.HBCIDialogInit;
 import org.kapott.hbci.dialog.HBCIMessage;
 import org.kapott.hbci.dialog.HBCIMessageQueue;
+import org.kapott.hbci.dialog.KnownReturncode;
 import org.kapott.hbci.exceptions.HBCI_Exception;
 import org.kapott.hbci.passport.HBCIPassportInternal;
 import org.kapott.hbci.passport.HBCIPassportList;
@@ -100,7 +101,7 @@ public final class HBCIDialog
             
             // autosecmech
             HBCIUtils.log("checking whether passport is supported (but ignoring result)",HBCIUtils.LOG_DEBUG);
-            boolean s=mainPassport.isSupported();
+            boolean s = mainPassport.isSupported();
             HBCIUtils.log("passport supported: "+s,HBCIUtils.LOG_DEBUG);
             
             HBCIUtils.log(HBCIUtilsInternal.getLocMsg("STATUS_DIALOG_INIT"),HBCIUtils.LOG_INFO);
@@ -149,8 +150,24 @@ public final class HBCIDialog
                                                      new StringBuffer());
                 }
             }
-
             HBCIUtilsInternal.getCallback().status(mainPassport,HBCICallback.STATUS_DIALOG_INIT_DONE,new Object[] {ret,dialogid});
+            
+            if (!KnownReturncode.E9391.searchReturnValues(ret).isEmpty())
+            {
+              try
+              {
+                HBCIUtils.log("found 9391 code in response, performing new sync", HBCIUtils.LOG_INFO);
+                final HBCIUser user = new HBCIUser(kernel,mainPassport,false);
+                user.fetchSysId();
+              }
+              catch (Exception e)
+              {
+                // Wir werfen das nicht hoch. Wenn es fehlschlaegt, ist der Abruf der neuen System-ID halt fehlgeschlagen.
+                // Davon geht die Welt nicht unter. Im Zweifel muss der User halt manuell eine Synchronisierung durchführen.
+                HBCIUtils.log("failed: " + e.getMessage(),HBCIUtils.LOG_INFO);
+                HBCIUtils.log(e,HBCIUtils.LOG_DEBUG);
+              }
+            }
         }
         catch (Exception e)
         {
@@ -223,10 +240,14 @@ public final class HBCIDialog
                 int taskNum = 0;
                 for (HBCIJobImpl task:tasks)
                 {
-                    if (task.skipped())
-                        continue;
-                    
                     final String name = task.getName();
+
+                    if (task.skipped())
+                    {
+                        HBCIUtils.log("skipping task " + name, HBCIUtils.LOG_DEBUG);
+                        continue;
+                    }
+                    
                     HBCIUtils.log("adding task " + name,HBCIUtils.LOG_DEBUG);
                     HBCIUtilsInternal.getCallback().status(p,HBCICallback.STATUS_SEND_TASK,task);
 
@@ -276,11 +297,17 @@ public final class HBCIDialog
                     // für jeden Task die entsprechenden Rückgabedaten-Klassen füllen
                     for (HBCIJobImpl task:tasks)
                     {
+                        final String name = task.getName();
+
                         if (task.skipped())
+                        {
+                            HBCIUtils.log("skipping results for task " + name, HBCIUtils.LOG_DEBUG);
                             continue;
-                        
+                        }
+
                         try
                         {
+                            HBCIUtils.log("filling results for task " + name, HBCIUtils.LOG_DEBUG);
                             task.fillJobResult(msgstatus,segnum);
                             HBCIUtilsInternal.getCallback().status(p,HBCICallback.STATUS_SEND_TASK_DONE,task);
                         }
@@ -308,8 +335,13 @@ public final class HBCIDialog
                 HBCIMessage newMsg = null;
                 for (HBCIJobImpl task:tasks)
                 {
+                    final String name = task.getName();
+
                     if (task.skipped())
+                    {
+                        HBCIUtils.log("skipping repeat for task " + name, HBCIUtils.LOG_DEBUG);
                         continue;
+                    }
                     
                     HBCIJobImpl redo = task.redo();
                     if (redo != null)

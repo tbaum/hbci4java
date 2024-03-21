@@ -1,23 +1,23 @@
-
-/*  $Id: RDHXFile.java,v 1.1 2011/05/04 22:37:48 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.passport.rdhXfile;
 
@@ -41,6 +41,7 @@ import org.kapott.hbci.exceptions.InvalidPassphraseException;
 import org.kapott.hbci.manager.HBCIKey;
 import org.kapott.hbci.manager.HBCIUtils;
 import org.kapott.hbci.passport.rdhXfile.HBCIAccount.UserKeys;
+import org.kapott.hbci.tools.CryptUtils;
 
 public class RDHXFile
 {
@@ -121,7 +122,7 @@ public class RDHXFile
                 FileHeader       fileHeader=(FileHeader)getField(FileHeader.class);
                 String           algname=(fileHeader.getProfileVersion()==2)?"HmacSHA1":"HmacSHA256";
         	byte[]           derivedKey=deriveKey(24, algname);
-        	String provider = HBCIUtils.getParam("kernel.security.provider");
+        	final String provider = CryptUtils.getSecurityProvider();
         	SecretKeyFactory keyfac = provider==null ? SecretKeyFactory.getInstance("DESede") : SecretKeyFactory.getInstance("DESede", provider);
         	DESedeKeySpec    desKeyspec=new DESedeKeySpec(derivedKey);
         	SecretKey        key=keyfac.generateSecret(desKeyspec);
@@ -223,7 +224,7 @@ public class RDHXFile
                 FileHeader       fileHeader=(FileHeader)getField(FileHeader.class);
                 String           algname=(fileHeader.getProfileVersion()==2)?"HmacSHA1":"HmacSHA256";
                 byte[]           derivedKey=deriveKey(24, algname);
-            	String provider = HBCIUtils.getParam("kernel.security.provider");
+            	final String provider = CryptUtils.getSecurityProvider();
             	SecretKeyFactory keyfac = provider==null ? SecretKeyFactory.getInstance("DESede") : SecretKeyFactory.getInstance("DESede", provider);
                 DESedeKeySpec    desKeyspec=new DESedeKeySpec(derivedKey);
                 SecretKey        key=keyfac.generateSecret(desKeyspec);

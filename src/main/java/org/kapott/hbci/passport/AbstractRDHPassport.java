@@ -1,23 +1,23 @@
-
-/*  $Id: AbstractRDHPassport.java,v 1.1 2011/05/04 22:37:43 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.passport;
 
@@ -44,10 +44,10 @@ import org.kapott.hbci.manager.HBCIKernelImpl;
 import org.kapott.hbci.manager.HBCIUtils;
 import org.kapott.hbci.security.Crypt;
 import org.kapott.hbci.security.Sig;
+import org.kapott.hbci.tools.CryptUtils;
 
 
-public abstract class AbstractRDHPassport 
-	extends AbstractHBCIPassport 
+public abstract class AbstractRDHPassport extends AbstractHBCIPassport implements InitLetterPassport 
 {
     protected AbstractRDHPassport(Object init)
     {
@@ -181,7 +181,7 @@ public abstract class AbstractRDHPassport
 
     public String getCryptFunction()
     {
-        return Crypt.SECFUNC_ENC_3DES;
+        return Crypt.SECFUNC_ENC;
     }
 
     public String getCryptAlg()
@@ -225,6 +225,13 @@ public abstract class AbstractRDHPassport
         case 1:
         case 2:
         case 10:
+            // Sieht bizzar aus, macht aber nichts anderes, als die Anzahl
+            // noetiger Bytes auszurechnen, um die Anzahl Bits unterzukriegen
+            // Wuerde auch lesbarer gehen mit:
+            // int bytes = bits / 8;
+            // if (bits % 8 != 0) // Wenns nicht ganz aufging, brauchen wir ein Byte extra
+            //   bytes++;
+
             int bits=((RSAPublicKey)key).getModulus().bitLength();
             int bytes=bits>>3;
             if ((bits&0x07)!=0) {
@@ -268,6 +275,9 @@ public abstract class AbstractRDHPassport
         return ret;
     }
     
+    /**
+     * @see org.kapott.hbci.passport.InitLetterPassport#getSignatureParamSpec()
+     */
     public SignatureParamSpec getSignatureParamSpec()
     {
         int    profile=Integer.parseInt(getProfileVersion());
@@ -276,15 +286,15 @@ public abstract class AbstractRDHPassport
         
         switch (profile) {
         case 1:
-            hashalg="RIPEMD160";
+            hashalg=CryptUtils.HASH_ALG_RIPE_MD160;
             hashprovider=CryptAlgs4JavaProvider.NAME;
             break;
         case 2:
-            hashalg="RIPEMD160";
+            hashalg=CryptUtils.HASH_ALG_RIPE_MD160;
             hashprovider=CryptAlgs4JavaProvider.NAME;
             break;
         case 10:
-            hashalg="SHA-256";
+            hashalg=CryptUtils.HASH_ALG_SHA256;
             // hashprovider=null;
             break;
         default:
@@ -313,7 +323,7 @@ public abstract class AbstractRDHPassport
             sigprovider=CryptAlgs4JavaProvider.NAME;
             break;
         case 10:
-            sigalg="PKCS1_PSS";
+            sigalg=CryptUtils.SIGN_ALG_RSA;
             sigprovider=CryptAlgs4JavaProvider.NAME;
             break;
         default:
@@ -336,7 +346,7 @@ public abstract class AbstractRDHPassport
         try {
             KeyGenerator generator=KeyGenerator.getInstance("DESede");
             SecretKey key=generator.generateKey();
-        	String provider = HBCIUtils.getParam("kernel.security.provider");
+        	final String provider = CryptUtils.getSecurityProvider();
         	SecretKeyFactory factory = provider==null ? SecretKeyFactory.getInstance("DESede") : SecretKeyFactory.getInstance("DESede", provider);
             DESedeKeySpec spec=(DESedeKeySpec)(factory.getKeySpec(key,DESedeKeySpec.class));
             byte[] bytes=spec.getKey();
@@ -390,7 +400,7 @@ public abstract class AbstractRDHPassport
         
         // Wenn es eine nicht-anonyme Dialog-Initialisierung ist, rufen wir die Schluessel mit ab
         RawHBCIDialog init = ctx.getDialogInit();
-        if (init.getTemplate() != KnownDialogTemplate.INIT)
+        if (init.getTemplate() != KnownDialogTemplate.INIT || ctx.isAnonymous())
             return;
         
         if (!this.needInstKeys())

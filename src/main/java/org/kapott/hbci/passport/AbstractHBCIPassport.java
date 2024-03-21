@@ -1,23 +1,23 @@
-
-/*  $Id: AbstractHBCIPassport.java,v 1.4 2012/03/13 22:07:43 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.passport;
 
@@ -246,7 +246,13 @@ public abstract class AbstractHBCIPassport
                 entry.name=upd.getProperty(header+".name1");
                 entry.name2=upd.getProperty(header+".name2");
                 entry.bic=upd.getProperty(header+".KTV.bic");
+                
+                // Seit HIUPD Version 6 gibt es die IBAN zweimal - einmal im DEG KTV und dann nochmal
+                // direkt im HIUPD. Die Banken befüllen das unterschiedlich. Wir checken daher beide Stellen.
                 entry.iban=upd.getProperty(header+".KTV.iban");
+                if (entry.iban == null || entry.iban.length() == 0)
+                  entry.iban=upd.getProperty(header+".iban");
+                
                 entry.acctype=upd.getProperty(header+".acctype");
                 
                 String st;
@@ -276,33 +282,40 @@ public abstract class AbstractHBCIPassport
         return ret.toArray(new Konto[ret.size()]);
     }
     
+    /**
+     * @see org.kapott.hbci.passport.HBCIPassport#fillAccountInfo(org.kapott.hbci.structures.Konto)
+     */
     public final void fillAccountInfo(Konto account)
     {
-        String  number=HBCIUtilsInternal.stripLeadingZeroes(account.number);
-        String  iban=HBCIUtilsInternal.stripLeadingZeroes(account.iban);
-        boolean haveNumber=(number!=null && number.length()!=0);
-        boolean haveIBAN=(iban!=null && iban.length()!=0);
+        String  number     = HBCIUtilsInternal.stripLeadingZeroes(account.number);
+        String  subNumber  = HBCIUtilsInternal.stripLeadingZeroes(account.subnumber);
+        String  iban       = HBCIUtilsInternal.stripLeadingZeroes(account.iban);
+        boolean haveNumber = (number!=null && number.length()!=0);
+        boolean haveSubNumber = (subNumber!=null && subNumber.length()!=0);
+        boolean haveIBAN   = (iban!=null && iban.length()!=0);
         
-        Konto[] accounts=getAccounts();
+        Konto[] accounts = getAccounts();
         
-        for (int i=0;i<accounts.length;i++) {
-            String temp_number=HBCIUtilsInternal.stripLeadingZeroes(accounts[i].number);
-            String temp_iban=HBCIUtilsInternal.stripLeadingZeroes(accounts[i].iban);
+        for (int i=0;i<accounts.length;i++)
+        {
+            String temp_number = HBCIUtilsInternal.stripLeadingZeroes(accounts[i].number);
+            String temp_subnumber = HBCIUtilsInternal.stripLeadingZeroes(accounts[i].subnumber);
+            String temp_iban = HBCIUtilsInternal.stripLeadingZeroes(accounts[i].iban);
             
-            if (haveNumber && number.equals(temp_number) ||
-                    haveIBAN && iban.equals(temp_iban)) 
+            if ((haveNumber && number.equals(temp_number) && (!haveSubNumber || subNumber.equals(temp_subnumber)))
+                    || (haveIBAN && iban.equals(temp_iban)))
             {
-                account.blz=accounts[i].blz;
-                account.country=accounts[i].country;
-                account.number=accounts[i].number;
-                account.subnumber=accounts[i].subnumber;
-                account.type=accounts[i].type;
-                account.curr=accounts[i].curr;
-                account.customerid=accounts[i].customerid;
-                account.name=accounts[i].name;
-                account.bic=accounts[i].bic;
-                account.iban=accounts[i].iban;
-                account.acctype=accounts[i].acctype;
+                if (accounts[i].blz != null        && accounts[i].blz.length() > 0)        account.blz=accounts[i].blz;
+                if (accounts[i].country != null    && accounts[i].country.length() > 0)    account.country=accounts[i].country;
+                if (accounts[i].number != null     && accounts[i].number.length() > 0)     account.number=accounts[i].number;
+                if (accounts[i].subnumber != null  && accounts[i].subnumber.length() > 0)  account.subnumber=accounts[i].subnumber;
+                if (accounts[i].type != null       && accounts[i].type.length() > 0)       account.type=accounts[i].type;
+                if (accounts[i].curr != null       && accounts[i].curr.length() > 0)       account.curr=accounts[i].curr;
+                if (accounts[i].customerid != null && accounts[i].customerid.length() > 0) account.customerid=accounts[i].customerid;
+                if (accounts[i].name != null       && accounts[i].name.length() > 0)       account.name=accounts[i].name;
+                if (accounts[i].bic != null        && accounts[i].bic.length() > 0)        account.bic=accounts[i].bic;
+                if (accounts[i].iban != null       && accounts[i].iban.length() > 0)       account.iban=accounts[i].iban;
+                if (accounts[i].acctype != null    && accounts[i].acctype.length() > 0)    account.acctype=accounts[i].acctype;
                 break;
             }
         }

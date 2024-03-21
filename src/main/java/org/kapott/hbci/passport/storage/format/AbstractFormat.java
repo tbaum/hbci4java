@@ -1,7 +1,21 @@
 /**********************************************************************
  *
- * Copyright (c) by Olaf Willuhn
- * All rights reserved
+ * This file is part of HBCI4Java.
+ * Copyright (c) Olaf Willuhn
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  **********************************************************************/
 
@@ -17,6 +31,7 @@ import org.kapott.hbci.manager.HBCIUtils;
 import org.kapott.hbci.manager.HBCIUtilsInternal;
 import org.kapott.hbci.manager.LogFilter;
 import org.kapott.hbci.passport.HBCIPassport;
+import org.kapott.hbci.tools.CryptUtils;
 
 /**
  * Abstrakte Basis-Klasse der Formate.
@@ -24,15 +39,6 @@ import org.kapott.hbci.passport.HBCIPassport;
 public abstract class AbstractFormat implements PassportFormat
 {
     private final static String CACHE_KEY = "__cached_passphrase__";
-    
-    /**
-     * Liefert einen optionalen Security-Provier. 
-     * @return der Security-Provider oder NULL, wenn keiner definiert ist.
-     */
-    String getSecurityProvider()
-    {
-        return HBCIUtils.getParam("kernel.security.provider");
-    }
     
     /**
      * @see org.kapott.hbci.passport.storage.format.PassportFormat#supported()
@@ -58,7 +64,7 @@ public abstract class AbstractFormat implements PassportFormat
      */
     protected Cipher getCipher() throws GeneralSecurityException
     {
-        final String provider = this.getSecurityProvider();
+        final String provider = CryptUtils.getSecurityProvider();
         final String alg      = this.getCipherAlg();
         return provider != null ? Cipher.getInstance(alg,provider) : Cipher.getInstance(alg);
     }

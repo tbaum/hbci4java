@@ -1,17 +1,28 @@
 /**********************************************************************
- * $Source: /cvsroot/hibiscus/hbci4java/src/org/kapott/hbci/manager/FlickerCode.java,v $
- * $Revision: 1.9 $
- * $Date: 2011/06/24 16:53:23 $
- * $Author: willuhn $
  *
- * Copyright (c) by willuhn - software & services
- * All rights reserved
+ * This file is part of HBCI4Java.
+ * Copyright (c) Olaf Willuhn
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  **********************************************************************/
 
 package org.kapott.hbci.manager;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -31,12 +42,44 @@ public class FlickerCode
     /**
      * HHD-Version 1.4
      */
-    HHD14,
+    HHD14(org.kapott.hbci.manager.HHDVersion.QR_1_4,
+          org.kapott.hbci.manager.HHDVersion.HHD_1_4,
+          org.kapott.hbci.manager.HHDVersion.MS_1),
     
     /**
      * HHD-Version 1.3
      */
-    HHD13
+    HHD13(org.kapott.hbci.manager.HHDVersion.QR_1_3,
+          org.kapott.hbci.manager.HHDVersion.HHD_1_3,
+          org.kapott.hbci.manager.HHDVersion.HHD_1_2),
+    
+    ;
+      
+    private List<org.kapott.hbci.manager.HHDVersion> assigned = new ArrayList<>();
+      
+    /**
+     * ct.
+     * @param assigned Liste der zugeordneten HHD-Versionen.
+     */
+    private HHDVersion(org.kapott.hbci.manager.HHDVersion... assigned)
+    {
+      this.assigned = Arrays.asList(assigned);
+    }
+    
+    /**
+     * Versucht die HHD-Version zu ermitteln.
+     * @param h die HHD-Version.
+     * @return das korrespondierende interne Enum.
+     */
+    private static HHDVersion find(org.kapott.hbci.manager.HHDVersion h)
+    {
+      for (HHDVersion v:values())
+      {
+        if (v.assigned.contains(h))
+          return v;
+      }
+      return null;
+    }
   }
   
   /**
@@ -145,12 +188,32 @@ public class FlickerCode
    */
   public static FlickerCode tryParse(String challenge, String hhduc)
   {
+    return tryParse(null,challenge,hhduc);
+  }
+
+  /**
+   * Versucht, aus Challenge und Challenge HHDuc den Flicker-Code zu extrahieren
+   * und ihn in einen flickerfaehigen Code umzuwandeln.
+   * Nur wenn tatsaechlich ein gueltiger Code enthalten ist, der als
+   * HHDuc-Code geparst und in einen Flicker-Code umgewandelt werden konnte,
+   * liefert die Funktion den Code. Sonst immer NULL.
+   * @param hhd die HHD-Version. Kann NULL sein.
+   * @param challenge der Challenge-Text. Das DE "Challenge HHDuc" gibt es
+   * erst seit HITAN4. Einige Banken haben aber schon vorher optisches chipTAN
+   * gemacht. Die haben das HHDuc dann direkt im Freitext des Challenge
+   * mitgeschickt (mit String-Tokens zum Extrahieren markiert). Die werden vom
+   * FlickerCode-Parser auch unterstuetzt.
+   * @param hhduc das echte Challenge HHDuc.
+   * @return der geparste Flickercode oder NULL.
+   */
+  public static FlickerCode tryParse(org.kapott.hbci.manager.HHDVersion hhd, String challenge, String hhduc)
+  {
       // 1. Prioritaet hat hhduc. Gibts aber erst seit HITAN4
       if (hhduc != null && hhduc.trim().length() > 0)
       {
         try
         {
-          FlickerCode code = new FlickerCode(hhduc);
+          FlickerCode code = new FlickerCode(hhd,hhduc);
           code.render(); // testweise rendern
           return code;
         }
@@ -166,7 +229,7 @@ public class FlickerCode
       {
         try
         {
-          FlickerCode code = new FlickerCode(challenge);
+          FlickerCode code = new FlickerCode(hhd,challenge);
           code.render(); // testweise rendern
           return code;
         }
@@ -198,6 +261,36 @@ public class FlickerCode
    */
   public FlickerCode(String code)
   {
+    this(null,code);
+  }
+
+  /**
+   * ct.
+   * Parst den HHDuc-Code aus dem uebergebenen Code.
+   * @param hhd die HHD-Version. Kann NULL sein.
+   * @param code der zu parsende Code.
+   */
+  public FlickerCode(org.kapott.hbci.manager.HHDVersion hhd, String code)
+  {
+    // Wenn eine Version angegeben ist, versuchen wir es mit der
+    if (hhd != null)
+    {
+        try
+        {
+            HHDVersion v = HHDVersion.find(hhd);
+            if (v != null)
+                parse(code,v);
+            
+            // Wenn keine Exception geflogen ist, koennte es die richtige Version gewesen sein.
+            return;
+        }
+        catch (Exception e)
+        {
+          // Die HHD-Version war explizit angegeben, liess sich damit aber nicht parsen? Sehr verdaechtig
+          HBCIUtils.log("unable to parse code " + code + " as " + hhd + ": " + HBCIUtils.exception2String(e),HBCIUtils.LOG_DEBUG);
+        }
+    }
+    
     // Wir versuchen es erstmal als HHD 1.4
     try
     {

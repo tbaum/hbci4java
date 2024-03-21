@@ -1,29 +1,28 @@
-
-/*  $Id: HBCIHandler.java,v 1.2 2011/08/31 14:05:21 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.manager;
 
 import java.lang.reflect.Constructor;
 import java.security.KeyPair;
-import java.util.Date;
 import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.List;
@@ -83,7 +82,7 @@ HBCIExecStatus status=handle.execute();
 handle.close();
 </pre> */
 public final class HBCIHandler
-	implements IHandlerData
+	implements IHandlerData, AutoCloseable
 {
     public final static int REFRESH_BPD=1;
     public final static int REFRESH_UPD=2;
@@ -114,10 +113,40 @@ public final class HBCIHandler
                erzeugt worden sein */
     public HBCIHandler(String hbciversion,HBCIPassport passport)
     {
+        this(hbciversion,passport,false);
+    }
+
+    /** Anlegen eines neuen HBCI-Handler-Objektes. Beim Anlegen wird
+        überprüft, ob für die angegebene HBCI-Version eine entsprechende
+        Spezifikation verfügbar ist. Außerdem wird das übergebene
+        Passport überprüft. Dabei werden - falls nicht vorhanden und falls
+        @param lazyInit nicht auf true gesetzt ist - die BPD und die UPD
+        vom Kreditinstitut geholt. Bei Passports, die asymmetrische 
+        Verschlüsselungsverfahren benutzen (RDH), wird zusätzlich überprüft, 
+        ob alle benötigten Schlüssel vorhanden sind. Gegebenenfalls werden 
+        diese aktualisiert.
+        @param hbciversion zu benutzende HBCI-Version. gültige Werte sind:
+            <ul>
+              <li><code>null</code> - es wird <em>die</em> HBCI-Version benutzt, die bei der
+                  letzten Verwendung dieses Passports benutzt wurde</li>
+              <li>"<code>201</code>" für HBCI 2.01</li>
+              <li>"<code>210</code>" für HBCI 2.1</li>
+              <li>"<code>220</code>" für HBCI 2.2</li>
+              <li>"<code>plus</code>" für HBCI+</li>
+              <li>"<code>300</code>" für FinTS 3.0</li>
+            </ul>
+        @param passport das zu benutzende Passport. Dieses muss vorher mit
+               {@link org.kapott.hbci.passport.AbstractHBCIPassport#getInstance()}
+               erzeugt worden sein
+        @param lazyInit auf true setzen, um den UPD nachgelagert per
+               {@link #initThreaded()} zu laden (zum Handling der eventuellen
+               TAN-Abfrage) */
+    public HBCIHandler(String hbciversion,HBCIPassport passport,boolean lazyInit)
+    {
         try {
             if (passport==null)
                 throw new InvalidArgumentException(HBCIUtilsInternal.getLocMsg("EXCMSG_PASSPORT_NULL"));
-            
+
             if (hbciversion==null) {
                 hbciversion=passport.getHBCIVersion();
             }
@@ -125,117 +154,122 @@ public final class HBCIHandler
                 throw new InvalidArgumentException(HBCIUtilsInternal.getLocMsg("EXCMSG_NO_HBCIVERSION"));
 
             this.kernel=new HBCIKernelImpl(this,hbciversion);
-            
+
             this.passport=(HBCIPassportInternal)passport;
             this.passport.setParentHandlerData(this);
 
-            registerInstitute();
-            registerUser();
-            
+            if (!lazyInit) {
+              
+              // Das macht nur bei PIN/TAN Sinn
+              if ((passport instanceof AbstractPinTanPassport) && Feature.INIT_FLIP_USER_INST.isEnabled())
+              {
+                registerUser();
+                registerInstitute();
+              }
+              else
+              {
+                registerInstitute();
+                registerUser();
+              }
+            }
+
             if (!passport.getHBCIVersion().equals(hbciversion)) {
                 this.passport.setHBCIVersion(hbciversion);
                 this.passport.saveChanges();
             }
 
             dialogs=new Hashtable<String, HBCIDialog>();
-            
-            updateMetaInfo();
-
         } catch (Exception e) {
             throw new HBCI_Exception(HBCIUtilsInternal.getLocMsg("EXCMSG_CANT_CREATE_HANDLE"),e);
         }
     }
-    
-    /**
-     * Aktualisiert die Meta-Informationen.
-     */
-    public void updateMetaInfo()
+
+    /** <p>Führt die Abfrage von BPD und UPD aus, die normalerweise in
+        {@link #HBCIHandler(String, HBCIPassport)} bzw.
+        {@link #HBCIHandler(String, HBCIPassport, boolean)} mit lazyInit=false
+        durchgeführt wird, allerdings können Callbacks hier auch synchron
+        behandelt werden. Bei einem Aufruf von <code>initThreaded()</code>
+        wird der eigentliche HBCI-Dialog in einem separaten Thread geführt.
+        Bei evtl. auftretenden Callbacks wird geprüft, ob diese synchron oder
+        asynchron zu behandeln sind. Im asynchronen Fall wird der Callback wie
+        gewohnt durch Aufruf der <code>callback()</code>-Methode des 
+        registrierten "normalen" Callback-Objektes behandelt. Soll ein Callback
+        synchron behandelt werden, terminiert diese Methode.</p>
+        <p>Das zurückgegebene Status-Objekt zeigt an, ob diese Methode terminierte,
+        weil ein synchron zu behandelnder Callback aufgetreten ist oder weil die
+        Ausführung aller HBCI-Dialoge abgeschlossen ist.</p>
+        <p>Mehr Informationen dazu in der Datei 
+        <code>README.ThreadedCallbacks</code>.</p>*/
+    public HBCIExecThreadedStatus initThreaded()
     {
-        if (this.passport.getBPD() == null)
-        {
-          HBCIUtils.log("have no bpd, skip fetching of meta info", HBCIUtils.LOG_DEBUG);
-          return;
-        }
-        
-        final Properties upd = this.passport.getUPD();
-        
-        // Wenn wir schon UPD haben, checken wir, ob wir die Daten erst kuerzlich abgerufen haben
-        if (upd != null && upd.containsKey(HBCIUser.UPD_KEY_METAINFO))
-        {
-            HBCIUtils.log("meta info already fetched", HBCIUtils.LOG_DEBUG);
-            return;
-        }
+        HBCIUtils.log("main thread: starting new threaded init",HBCIUtils.LOG_DEBUG);
 
-        final Properties lowlevel = this.getSupportedLowlevelJobs();
-        
-        //////////////////////////////////////////////////////////////////////////////////
-        // 1. Abruf der TAN-Medien
-        // Seit SCA muessen wir den Abruf in einem dedizierten Dialog machen, weil
-        // wir in der Dialoginitialisierung im HKTAN ja eine Referenz zu HKTAB mitschicken.
-        // Daher darf nach der Dialog-Initialisierung nichts anderes gesendet werden
-        // als der HKTAB.
-        // Daher machen wir zwei getrennte Dialoge.
-        try
-        {
-            // TAN-Medien-Liste macht natuerlich nur bei PIN/TAN Sinn.
-            if (lowlevel.getProperty("TANMediaList") != null && (this.passport instanceof AbstractPinTanPassport))
-            {
-                HBCIUtils.log("Aktualisiere TAN-Medien", HBCIUtils.LOG_INFO);
-                final HBCIJob job = this.newJob("TANMediaList");
-                job.addToQueue();
-                final HBCIExecStatus status = this.execute();
-                if (status.isOK())
-                    HBCIUtils.log("successfully fetched tan media list", HBCIUtils.LOG_DEBUG);
-                else
-                    HBCIUtils.log("error while fetching tan media info: " + status.toString(), HBCIUtils.LOG_ERR);
-            }
-            else
-            {
-                HBCIUtils.log("fetching of tan media list not supported by institute", HBCIUtils.LOG_DEBUG);
-            }
-        }
-        catch (Exception e)
-        {
-            // Den Fehler tolerieren wir. Dann muss der User die Medienbezeichnung eben selbst eingeben
-            HBCIUtils.log(e);
-        }
-        //
-        //////////////////////////////////////////////////////////////////////////////////
-        
-        //////////////////////////////////////////////////////////////////////////////////
-        // Abruf der SEPA-Infos - nur wenn wir schon UPDs haben - dort tragen wir ja die Kontodaten dann ein
-        try
-        {
-            if (lowlevel.getProperty("SEPAInfo") != null && upd != null)
-            {
-                HBCIUtils.log("Aktualisiere SEPA-Informationen", HBCIUtils.LOG_INFO);
-                final HBCIJob job = this.newJob("SEPAInfo");
-                job.addToQueue();
-                final HBCIExecStatus status = this.execute();
-                if (status.isOK())
-                    HBCIUtils.log("successfully fetched sepa info", HBCIUtils.LOG_DEBUG);
-                else
-                    HBCIUtils.log("error while fetching sepa info: " + status.toString(), HBCIUtils.LOG_ERR);
-            }
-            else
-            {
-                HBCIUtils.log("fetching of sepa info not supported by institute", HBCIUtils.LOG_DEBUG);
-            }
-        }
-        catch (Exception e)
-        {
-            // Fehler tolerieren
-            HBCIUtils.log(e);
-        }
-        //
-        //////////////////////////////////////////////////////////////////////////////////
+        final ThreadSyncer sync_main=new ThreadSyncer("sync_main");
+        passport.setPersistentData("thread_syncer_main",sync_main);
 
-        // Wir markieren das immer als erledigt - egal, ob es geklappt hat oder nicht
-        // Dafür wiederholen wir es zyklisch immer mal wieder
-        HBCIUtils.log("meta info fetched",HBCIUtils.LOG_DEBUG);
-        passport.getUPD().setProperty(HBCIUser.UPD_KEY_METAINFO,new Date().toString());
-        passport.saveChanges();
+        new Thread() { public void run() {
+            try {
+                HBCIUtils.log("hbci thread: starting init()",HBCIUtils.LOG_DEBUG);
+
+                if (Feature.INIT_FLIP_USER_INST.isEnabled())
+                {
+                  registerUser();
+                  registerInstitute();
+                }
+                else
+                {
+                  registerInstitute();
+                  registerUser();
+                }
+                
+                sync_main.setData("execStatus",null);
+            } catch (Exception e) {
+                // im fehlerfall muss sicherheitshalber ein noch
+                // im sync-objekt enthaltenes altes execStatus-objekt entfernt
+                // werden
+                sync_main.setData("execStatus",null);
+            } finally {
+                // die existenz von "thread_syncer" im passport entscheidet
+                // in CallbackThreaded darüber, ob der threaded callback mechanimus
+                // verwendet werden soll oder das standard-callback.
+                // der threaded mechanismus wird allerdings *nur* für hbci.init() und
+                // hbci.execute() verwendet, deshalb muss das thread_syncer-Objekt
+                // wieder entfernt werden, wenn hbci.init() beendet ist.
+                passport.setPersistentData("thread_syncer_main",null);
+
+                // egal, wie der hbci-thread beendet wird (fehlerhaft oder nicht),
+                // am ende muss auf jeden fall ein evtl. noch wartender main-thread
+                // wieder aufgeweckt werden (das kann entweder executeThreaded()
+                // oder continueThreaded() sein)
+                HBCIUtils.log("hbci thread: awaking main thread with hbci result data",HBCIUtils.LOG_DEBUG);
+                sync_main.setData("callbackData",null);
+                sync_main.stopWaiting();
+
+                HBCIUtils.log("hbci thread: thread finished",HBCIUtils.LOG_DEBUG);
+            }
+        }}.start();
+
+        // für dieses wait() brauche ich kein timeout, weil der hbci-thread auf
+        // jeden fall ein notify() macht, sobald er beendet wird oder sobald der
+        // hbci-thread callback-daten braucht. die sichere beendigung des
+        // hbci-threads wiederum wird dadurch abgesichert, dass die waits() aus
+        // dem hbci-thread (warten auf callback-daten) mit timeouts versehen sind
+        HBCIUtils.log("main thread: waiting for hbci result or callback data from hbci thread",HBCIUtils.LOG_DEBUG);
+        sync_main.startWaiting(Integer.parseInt(HBCIUtils.getParam("kernel.threaded.maxwaittime","300")), "no response from hbci thread - timeout");
+
+        HBCIExecThreadedStatus threadStatus=new HBCIExecThreadedStatus();
+        threadStatus.setCallbackData((Hashtable<String, Object>)sync_main.getData("callbackData"));
+        threadStatus.setExecStatus((HBCIExecStatus)sync_main.getData("execStatus"));
+
+        HBCIUtils.log(
+                "main thread: received answer from hbci thread, returning status "+
+                        "(isCallback="+threadStatus.isCallback()+
+                        ", isFinished="+threadStatus.isFinished()+")",
+                HBCIUtils.LOG_DEBUG);
+
+        return threadStatus;
     }
+
 
     /**
      * Macht die anonyme Initialisierung und ruft die BPD ab.
@@ -263,6 +297,18 @@ public final class HBCIHandler
         } catch (Exception ex) {
             throw new HBCI_Exception(HBCIUtilsInternal.getLocMsg("EXCMSG_CANT_REG_USER"),ex);
         }
+    }
+
+    /**
+     * @see org.kapott.hbci.manager.IHandlerData#sync(boolean)
+     */
+    public void sync(boolean force)
+    {
+      HBCIInstitute inst = new HBCIInstitute(kernel,passport,false);
+      inst.sync(force);
+      
+      HBCIUser user = new HBCIUser(kernel,passport,false);
+      user.sync(force);
     }
     
     /** <p>Schließen des Handlers. Diese Methode sollte immer dann aufgerufen werden,

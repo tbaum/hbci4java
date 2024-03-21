@@ -1,23 +1,23 @@
-
-/*  $Id: HBCICallbackIOStreams.java,v 1.1 2011/05/04 22:37:52 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.callback;
 
@@ -89,7 +89,10 @@ public class HBCICallbackIOStreams
     protected String readLine() throws IOException
     {
         BufferedReader r = this.getInStream();
-        return r != null ? r.readLine() : "";
+        if (r == null)
+          return "";
+        final String s = r.readLine();
+        return s != null ? s : "";
     }
     
     /** Schreiben von Logging-Ausgaben in einen <code>PrintStream</code>. Diese Methode implementiert die Logging-Schnittstelle
@@ -160,6 +163,12 @@ public class HBCICallbackIOStreams
                     logfilter.addSecretData(secret,"X",LogFilter.FILTER_SECRETS);
                     retData.replace(0,retData.length(),secret);
                     break;
+                    
+                case NEED_PT_DECOUPLED:
+                  getOutStream().print(msg+": ");
+                  getOutStream().flush();
+                  this.readLine();
+                  break;
     
                 case HAVE_HARDPIN:
                     HBCIUtils.log("end of entering hardpin",HBCIUtils.LOG_DEBUG);

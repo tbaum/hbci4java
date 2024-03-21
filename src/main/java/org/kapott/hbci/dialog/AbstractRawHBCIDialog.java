@@ -1,22 +1,36 @@
 /**********************************************************************
  *
+ * This file is part of HBCI4Java.
  * Copyright (c) 2019 Olaf Willuhn
- * All rights reserved.
- * 
- * This software is copyrighted work licensed under the terms of the
- * Jameica License.  Please consult the file "LICENSE" for details. 
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  **********************************************************************/
 
 package org.kapott.hbci.dialog;
 
+import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.kapott.hbci.dialog.KnownTANProcess.Variant;
 import org.kapott.hbci.exceptions.HBCI_Exception;
 import org.kapott.hbci.manager.HBCIKernelImpl;
 import org.kapott.hbci.manager.HBCIUtils;
 import org.kapott.hbci.passport.HBCIPassportInternal;
 import org.kapott.hbci.status.HBCIMsgStatus;
+import org.kapott.hbci.tools.StringUtil;
 
 /**
  * Abstrakte Basis-Klasse fuer "rohe" HBCI-Dialoge.
@@ -130,7 +144,18 @@ public abstract class AbstractRawHBCIDialog implements RawHBCIDialog
      */
     protected void checkResult(final DialogContext ctx)
     {
-        
+    }
+    
+    /**
+     * @see org.kapott.hbci.dialog.RawHBCIDialog#createSCARequest(java.util.Properties, int)
+     */
+    @Override
+    public SCARequest createSCARequest(Properties secmechInfo, int hktanVersion)
+    {
+        SCARequest r = new SCARequest();
+        r.setVersion(hktanVersion);
+        r.setVariant(Variant.determine(secmechInfo != null ? secmechInfo.getProperty("process") : null));
+        return r;
     }
     
     /**
@@ -159,5 +184,31 @@ public abstract class AbstractRawHBCIDialog implements RawHBCIDialog
     protected String getActualTemplate(final DialogContext ctx)
     {
         return this.getTemplate().getName();
+    }
+    
+    /**
+     * Liefert die hoechste bei der Bank verfuegbare Segment-Version.
+     * @param ctx der Kontext.
+     * @param gvName der Name des Geschaeftsvorfalls.
+     * @param defaultVersion die Default-Version, wenn keine gefunden wurde.
+     * @return die Segment-Version oder NULL, wenn keine brauchbare Version unterstuetzt wird
+     */
+    protected Integer getSegmentVersion(DialogContext ctx, String gvName, Integer defaultVersion)
+    {
+      final HBCIPassportInternal p = ctx.getPassport();
+      final Properties props = p.getParamSegmentNames();
+      final String version = props.getProperty(gvName);
+      
+      if (!StringUtil.hasText(version))
+        return defaultVersion;
+  
+      try
+      {
+        return Integer.valueOf(version);
+      } catch (Exception e)
+      {
+        HBCIUtils.log("invalid segment version: " + version, HBCIUtils.LOG_WARN);
+        return defaultVersion;
+      }
     }
 }

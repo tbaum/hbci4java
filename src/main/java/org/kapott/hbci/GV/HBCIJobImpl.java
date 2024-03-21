@@ -1,23 +1,23 @@
-
-/*  $Id: HBCIJobImpl.java,v 1.5 2011/06/06 10:30:31 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.GV;
 
@@ -811,11 +811,24 @@ public abstract class HBCIJobImpl
      */
     public HBCIJobImpl redo()
     {
+        if (!this.redoAllowed())
+            return null;
+        
         return (this.getContinueOffset() != null) ? this : null;
     }
     
     /**
-     * Gibt (sofern vorhanden) den offset-Wert des letzten HBCI-Rückgabecodes 3040 zurück.
+     * Wir erlauben per Default erstmal kein Redo bei einem 3040-Code. Es sei denn, im Job ist explizit uebeschrieben.
+     * Siehe https://homebanking-hilfe.de/forum/topic.php?p=150614#real150614
+     * @return true, wenn redo erlaubt ist.
+     */
+    protected boolean redoAllowed()
+    {
+        return false;
+    }
+    
+    /**
+     * Gibt (sofern vorhanden) den Wiederaufsetzpunkt des letzten HBCI-Rückgabecodes 3040 zurück.
      * @return der Offset-Wert oder NULL.
      */
     private String getContinueOffset()
@@ -825,7 +838,7 @@ public abstract class HBCIJobImpl
     }
     
     /**
-     * Liefert den Rueckgabecode 3040 (fuer "Weitere Daten folgen"), insofern vorhanden. 
+     * Liefert den Rueckgabecode 3040 (fuer "Weitere Daten folgen"), insofern vorhanden und mit einem Parameter versehen.
      * @param loop die Nummer des Durchlaufs, beginnend bei 0.
      * @return der Rueckgabewert, insofern vorhanden. Sonst NULL.
      */
@@ -836,16 +849,30 @@ public abstract class HBCIJobImpl
         for (int i=0;i<num;i++)
         {
             HBCIRetVal retval = jobResult.getRetVal(i);
-            
-            if (KnownReturncode.W3040.is(retval.code) && retval.params.length != 0 && (--loop) == 0)
+            String[] p = retval.params;
+            if (KnownReturncode.W3040.is(retval.code) && p != null && p.length > 0 && p[0] != null && p[0].length() > 0 && (--loop) == 0)
                 return retval;
         }
         
         return null;
     }
 
+    /* füllt das Objekt mit den Rückgabedaten, wenn der GV durch einen TAN Task
+    gewrapped wurde und die GV-spezifischen Daten daraus übernommen werden müssen.
+    Siehe dazu auch HBCIJobImpl::fillJobResult() 
+    */
+    public void fillJobResultFromTanJob(HBCIMsgStatus status,String header,int seg)
+    {
+        Properties result = status.getData();
+        saveBasicValues(result, seg);
+        saveReturnValues(status, seg);
 
-
+        // wichtig um Parameter wie "content" zu füllen
+        extractPlaintextResults(status, header, contentCounter);
+        // der contentCounter wird fuer jedes antwortsegment um 1 erhoeht
+        extractResults(status, header, contentCounter++);
+    }
+    
     /* füllt das Objekt mit den Rückgabedaten. Dazu wird zuerst eine Liste aller
        Segmente erstellt, die Rückgabedaten für diesen Task enthalten. Anschließend
        werden die HBCI-Rückgabewerte (RetSegs) im outStore gespeichert. Danach werden

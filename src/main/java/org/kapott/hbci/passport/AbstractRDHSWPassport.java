@@ -1,23 +1,23 @@
-
-/*  $Id: AbstractRDHSWPassport.java,v 1.1 2011/05/04 22:37:43 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.passport;
 
@@ -43,6 +43,7 @@ import org.kapott.hbci.exceptions.HBCI_Exception;
 import org.kapott.hbci.manager.HBCIKey;
 import org.kapott.hbci.manager.HBCIUtils;
 import org.kapott.hbci.manager.HBCIUtilsInternal;
+import org.kapott.hbci.tools.CryptUtils;
 
 public abstract class AbstractRDHSWPassport 
 	extends AbstractRDHPassport 
@@ -295,7 +296,7 @@ public abstract class AbstractRDHSWPassport
     private byte[] encryptMessage(byte[] plainMsg,SecretKey msgkey)
     {
         try {
-        	String provider = HBCIUtils.getParam("kernel.security.provider");
+        	final String provider = CryptUtils.getSecurityProvider();
         	Cipher cipher = provider == null ? Cipher.getInstance("DESede/CBC/NoPadding") : Cipher.getInstance("DESede/CBC/NoPadding", provider);
             byte[] iv=new byte[8];
             Arrays.fill(iv,(byte)(0));
@@ -313,7 +314,7 @@ public abstract class AbstractRDHSWPassport
         try {
             // schluessel als byte-array abspeichern
 
-        	String provider = HBCIUtils.getParam("kernel.security.provider");
+        	final String provider = CryptUtils.getSecurityProvider();
         	SecretKeyFactory factory = provider==null ? SecretKeyFactory.getInstance("DESede") : SecretKeyFactory.getInstance("DESede", provider);
             DESedeKeySpec spec=(DESedeKeySpec)(factory.getKeySpec(msgkey,DESedeKeySpec.class));
             byte[] plainKey=spec.getKey(); // plainKey ist der DESede-Key
@@ -388,7 +389,7 @@ public abstract class AbstractRDHSWPassport
             System.arraycopy(plainKey,plainKey.length-16,realPlainKey,16,8);
 
             DESedeKeySpec spec=new DESedeKeySpec(realPlainKey);
-        	String provider = HBCIUtils.getParam("kernel.security.provider");
+        	final String provider = CryptUtils.getSecurityProvider();
         	SecretKeyFactory fac = provider==null ? SecretKeyFactory.getInstance("DESede") : SecretKeyFactory.getInstance("DESede", provider);
             SecretKey key=fac.generateSecret(spec);
 

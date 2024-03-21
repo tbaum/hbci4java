@@ -1,23 +1,23 @@
-
-/*  $Id: HBCIUser.java,v 1.2 2011/08/31 14:05:21 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.manager;
 
@@ -29,7 +29,11 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.kapott.hbci.callback.HBCICallback;
 import org.kapott.hbci.comm.Comm;
@@ -40,22 +44,41 @@ import org.kapott.hbci.dialog.HBCIDialogInit;
 import org.kapott.hbci.dialog.HBCIDialogLockKeys;
 import org.kapott.hbci.dialog.HBCIDialogSync;
 import org.kapott.hbci.dialog.HBCIDialogSync.Mode;
+import org.kapott.hbci.dialog.HBCIProcess;
+import org.kapott.hbci.dialog.HBCIProcessSepaInfo;
+import org.kapott.hbci.dialog.HBCIProcessTanMedia;
 import org.kapott.hbci.exceptions.HBCI_Exception;
 import org.kapott.hbci.exceptions.NeedKeyAckException;
 import org.kapott.hbci.exceptions.ProcessException;
 import org.kapott.hbci.passport.HBCIPassport;
 import org.kapott.hbci.passport.HBCIPassportInternal;
 import org.kapott.hbci.status.HBCIMsgStatus;
+import org.kapott.hbci.structures.Konto;
+import org.kapott.hbci.tools.StringUtil;
 
-/* @brief Instances of this class represent a certain user in combination with
-    a certain institute. */
+/**
+ * Kapselt die authentifizierten Initialisierungsdialoge. Also im Wesentlichen alles, was mit den UPD zu tun hat.
+ */
 public final class HBCIUser implements IHandlerData
 {
     public final static String UPD_KEY_HBCIVERSION = "_hbciversion";
-    public final static String UPD_KEY_TANMEDIA = "tanmedia.names";
-    public final static String UPD_KEY_METAINFO = "_fetchedMetaInfo";
     
-    private final static List<String> UPD_PROTECT_KEYS = Arrays.asList(UPD_KEY_METAINFO,UPD_KEY_TANMEDIA);
+    /**
+     * In dem UPD-Property sind die TAN-Medienbezeichnungen gespeichert
+     */
+    public final static String UPD_KEY_TANMEDIA = "tanmedia.names";
+    
+    /**
+     * In dem UPD-Property ist gespeichert, wann wir die SEPA-Infos (IBAN, BIC) abgerufen haben
+     */
+    public final static String UPD_KEY_FETCH_SEPAINFO = "_fetchedSepaInfo";
+    
+    /**
+     * In dem UPD-Property ist gespeichert, wann wir die TAN-Medienbezeichnungen abgerufen haben
+     */
+    public final static String UPD_KEY_FETCH_TANMEDIA = "_fetchedTanMedia";
+    
+    private final static List<String> UPD_PROTECT_KEYS = Arrays.asList(UPD_KEY_FETCH_TANMEDIA,UPD_KEY_FETCH_SEPAINFO,UPD_KEY_TANMEDIA);
 
     private HBCIPassportInternal passport;
     private HBCIKernelImpl       kernel;
@@ -215,6 +238,7 @@ public final class HBCIUser implements IHandlerData
                         passport.clearMyDigKey();
                         passport.saveChanges();
                     } else {
+                        HBCIUtils.log(ret.getExceptions());
                         HBCIUtils.log("keys have not been thrown away",HBCIUtils.LOG_WARN);
                     }
         
@@ -405,33 +429,39 @@ public final class HBCIUser implements IHandlerData
             HBCIUtilsInternal.getCallback().status(passport,HBCICallback.STATUS_INIT_SYSID,null);
             HBCIUtils.log("Rufe neue System-ID ab",HBCIUtils.LOG_INFO);
             
-            // autosecmech
             HBCIUtils.log("checking whether passport is supported (but ignoring result)",HBCIUtils.LOG_DEBUG);
             boolean s=passport.isSupported();
             HBCIUtils.log("passport supported: "+s,HBCIUtils.LOG_DEBUG);
 
-            passport.setSigId(new Long(1));
+            // 2023-08-24: Ich glaube, es ist falsch, hier pauschal die Sig-ID zurückzusetzen.
+            // Das sollte aus meiner Sicht nur gemacht werden, wenn Mode.SIG_ID verwendet wird. Also bei "fetchSigId".
+            // passport.setSigId(new Long(1));
             passport.setSysId("0");
-    
-            // Dialog-Context erzeugen
-            final DialogContext ctx = DialogContext.create(this.kernel,this.passport);
 
-            // Dialog-Synchronisierung senden
-            final HBCIDialogSync sync = new HBCIDialogSync(Mode.SYS_ID);
-            final HBCIMsgStatus ret = sync.execute(ctx);
-            final Properties result = ret.getData();
-    
-            HBCIInstitute inst=new HBCIInstitute(kernel,passport,false);
-            inst.updateBPD(result);
-            updateUPD(result);
-            passport.setSysId(result.getProperty("SyncRes.sysid"));
-            passport.saveChanges();
-    
-            HBCIUtilsInternal.getCallback().status(passport,HBCICallback.STATUS_INIT_SYSID_DONE,new Object[] {ret,passport.getSysId()});
-            HBCIUtils.log("new sys-id is "+passport.getSysId(),HBCIUtils.LOG_DEBUG);
-            
-            final HBCIDialogEnd end = new HBCIDialogEnd();
-            end.execute(ctx);
+            ////////////////////////////////////////
+            // Sync
+            {
+                // Dialog-Synchronisierung senden
+                final DialogContext ctx = DialogContext.create(this.kernel,this.passport);
+                final HBCIDialogSync sync = new HBCIDialogSync(Mode.SYS_ID);
+                final HBCIMsgStatus ret = sync.execute(ctx);
+                final Properties result = ret.getData();
+        
+                HBCIInstitute inst = new HBCIInstitute(kernel,passport,false);
+                inst.updateBPD(result);
+                updateUPD(result);
+                passport.setSysId(result.getProperty("SyncRes.sysid"));
+                passport.saveChanges();
+        
+                HBCIUtilsInternal.getCallback().status(passport,HBCICallback.STATUS_INIT_SYSID_DONE,new Object[] {ret,passport.getSysId()});
+                HBCIUtils.log("new sys-id is "+passport.getSysId(),HBCIUtils.LOG_DEBUG);
+                
+                final HBCIDialogEnd end = new HBCIDialogEnd();
+                end.execute(ctx);
+
+            }
+            //
+            ////////////////////////////////////////
         }
         catch (Exception e)
         {
@@ -532,6 +562,38 @@ public final class HBCIUser implements IHandlerData
             
             p.putAll(protectedKeys);
         }
+
+        // Wenn die UPD-Keys keine BIC und IBAN mehr enthalten, verwende
+        // die bekannten einfach weiter, solange die Kontonummer identisch ist.
+        // Manche Banken schicken in den UPDs scheinbar die Konto-Daten nicht mehr immer mit. Daher merken wird uns die vorherigen
+        // Werte, wenn keine neuen uebertragen wurden
+        if (upd != null && upd.size() > 0) {
+            Konto[] konten = passport.getAccounts();
+            final Pattern pattern = Pattern.compile("UPD\\.(KInfo(.*?)\\.KTV)\\.number");
+            for (final Object okey : result.keySet()) {
+                final String key = okey.toString();
+                final Matcher m = pattern.matcher(key);
+                if (m.matches()) {
+                    final String kinfo = m.group(1);
+                    if (!p.contains(kinfo + ".bic") || !p.contains(kinfo + ".iban")) {
+                        Optional<Konto> matchingKonto = Arrays.asList(konten).stream()
+                                .filter(konto ->
+                                    Objects.equals(konto.number, result.get(okey)) &&
+                                    Objects.equals(konto.blz, result.get("UPD." + kinfo + ".KIK.blz")) &&
+                                    Objects.equals(konto.country, result.get("UPD." + kinfo + ".KIK.country")))
+                                .findAny();
+                        matchingKonto.ifPresent(konto -> {
+                            if (StringUtil.hasText(konto.iban) && StringUtil.hasText(konto.bic)) {
+                                HBCIUtils.log(kinfo + ".iban / .bic is missing, using the previous UPD's value",
+                                        HBCIUtils.LOG_DEBUG);
+                                p.put(kinfo + ".bic", konto.bic);
+                                p.put(kinfo + ".iban", konto.iban);
+                            }
+                        });
+                    }
+                }
+            }
+        }
         
         // Wir aktualisieren unabhaengig davon, ob sich die Versionsnummer erhoeht hat oder nicht,
         // da nicht alle Banken die Versionsnummern erhoehen, wenn es Aenderungen gibt. Manche bleiben
@@ -600,35 +662,63 @@ public final class HBCIUser implements IHandlerData
         }
     }
 
-    private void updateUserData()
+    /**
+     * @see org.kapott.hbci.manager.IHandlerData#sync(boolean)
+     */
+    public void sync(boolean force)
     {
-        if (passport.getSysStatus().equals("1")) {
+        if (passport.getSysStatus().equals("1"))
+        {
             if (passport.getSysId().equals("0"))
-                fetchSysId();
+                this.fetchSysId();
             if (passport.getSigId().longValue()==-1)
-                fetchSigId();
+                this.fetchSigId();
         }
         
-        Properties upd=passport.getUPD();
-        Properties bpd=passport.getBPD();
-        String     hbciVersionOfUPD=(upd!=null)?upd.getProperty(UPD_KEY_HBCIVERSION):null;
+        Properties upd = passport.getUPD();
+        Properties bpd = passport.getBPD();
+        String hbciVersion = (upd != null) ? upd.getProperty(UPD_KEY_HBCIVERSION) : null;
 
-        // Wir haben noch keine BPD. Offensichtlich unterstuetzt die Bank
-        // das Abrufen von BPDs ueber einen anonymen Dialog nicht. Also machen
-        // wir das jetzt hier mit einem nicht-anonymen Dialog gleich mit
-        if (bpd == null || passport.getUPD() == null || hbciVersionOfUPD==null || !hbciVersionOfUPD.equals(kernel.getHBCIVersion())) 
+        ////////////////////////////////////////
+        // TAN-Medienbezeichnung abrufen - machen wir noch vor den UPD. Weil wir dafuer ja ggf. bereits das TAN-Verfahren brauchen (wir rufen dort ja auch KInfo ab)
+        {
+            final DialogContext ctx = DialogContext.create(this.kernel,this.passport);
+            HBCIProcess p = new HBCIProcessTanMedia(force);
+            p.execute(ctx);
+        }
+        //
+        ////////////////////////////////////////
+
+        ////////////////////////////////////////
+        // UPD abrufen, falls noetig
+        if (force || bpd == null || passport.getUPD() == null || hbciVersion==null || !hbciVersion.equals(kernel.getHBCIVersion())) 
         {
             fetchUPD();
         }
+        //
+        ////////////////////////////////////////
+
+        ////////////////////////////////////////
+        // Zum Schluss noch die SEPA-Infos abrufen
+        if (Feature.SYNC_SEPAINFO.isEnabled())
+        {
+          final DialogContext ctx = DialogContext.create(this.kernel,this.passport);
+          HBCIProcess p = new HBCIProcessSepaInfo(force);
+          p.execute(ctx);
+        }
+        //
+        ////////////////////////////////////////
     }
 
+    /**
+     * Registriert den User.
+     */
     public void register()
     {
-        if (passport.needUserKeys() && !passport.hasMySigKey()) {
+        if (passport.needUserKeys() && !passport.hasMySigKey())
             generateNewKeys();
-        }
-        updateUserData();
-        passport.setPersistentData("_registered_user", Boolean.TRUE);
+        
+        this.sync(false);
     }
     
     public void lockKeys()

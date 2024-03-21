@@ -1,23 +1,23 @@
-
-/*  $Id: HBCIPassportPinTan.java,v 1.6 2012/03/13 22:07:43 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.passport;
 
@@ -209,9 +209,21 @@ public class HBCIPassportPinTan extends AbstractPinTanPassport
             HBCIUtils.log("saving two step mechs: " + l, HBCIUtils.LOG_DEBUG);
             data.twostepMechs = l;
             
-            final String s = this.getCurrentTANMethod(false);
-            HBCIUtils.log("saving current tan method: "+s, HBCIUtils.LOG_DEBUG);
-            data.tanMethod = s;
+            try
+            {
+                final String s = this.getCurrentTANMethod(false);
+                HBCIUtils.log("saving current tan method: "+s, HBCIUtils.LOG_DEBUG);
+                data.tanMethod = s;
+            }
+            catch (Exception e)
+            {
+                // Nur zur Sicherheit. In der obigen Funktion werden u.U. eine Menge Sachen losgetreten.
+                // Wenn da irgendwas schief laeuft, soll deswegen nicht gleich das Speichern der Config
+                // scheitern. Im Zweifel speichern wir dann halt das ausgewaehlte Verfahren erstmal nicht
+                // und der User muss es beim naechsten Mal neu waehlen
+                HBCIUtils.log("could not determine current tan methode, skipping: " + e.getMessage(),HBCIUtils.LOG_DEBUG);
+                HBCIUtils.log(e,HBCIUtils.LOG_DEBUG2);
+            }
 
             PassportStorage.save(this,data,new File(this.getFileName()));
         }
@@ -377,9 +389,14 @@ public class HBCIPassportPinTan extends AbstractPinTanPassport
                         payload.append(hhduc);
                         callback = HBCICallback.NEED_PT_QRTAN;
                     }
+                    else if (hhd.getType() == Type.DECOUPLED)
+                    {
+                        callback = HBCICallback.NEED_PT_DECOUPLED;
+                        setPersistentData(KEY_PD_DECOUPLED,"true");
+                    }
                     else
                     {
-                        FlickerCode flicker = FlickerCode.tryParse(challenge,hhduc);
+                        FlickerCode flicker = FlickerCode.tryParse(hhd,challenge,hhduc);
                         if (flicker != null)
                         {
                             // Bei chipTAN liefern wir den bereits geparsten und gerenderten Flickercode
@@ -391,9 +408,15 @@ public class HBCIPassportPinTan extends AbstractPinTanPassport
                     HBCIUtilsInternal.getCallback().callback(this,callback,msg,HBCICallback.TYPE_TEXT,payload);
 
                     setPersistentData("externalid",null); // External-ID aus Passport entfernen
-                    if (payload == null || payload.length()==0) {
+
+                    // Beim Decoupled-Verfahren erhalten wir keine TAN. Daher müssen wir hier auch nichts signieren.
+                    // Wir ignorieren die Antwort aus dem Callback komplett
+                    if (callback == HBCICallback.NEED_PT_DECOUPLED)
+                      return (getPIN()+"|").getBytes("ISO-8859-1");
+                    
+                    if (payload == null || payload.length()==0)
                         throw new HBCI_Exception(HBCIUtilsInternal.getLocMsg("EXCMSG_TANZERO"));
-                    }
+                    
                     tan=payload.toString();
                 }
             }

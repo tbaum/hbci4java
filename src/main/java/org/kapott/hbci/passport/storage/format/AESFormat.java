@@ -1,7 +1,21 @@
 /**********************************************************************
  *
- * Copyright (c) by Olaf Willuhn
- * All rights reserved
+ * This file is part of HBCI4Java.
+ * Copyright (c) Olaf Willuhn
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  **********************************************************************/
 
@@ -33,6 +47,7 @@ import org.kapott.hbci.exceptions.HBCI_Exception;
 import org.kapott.hbci.manager.HBCIUtils;
 import org.kapott.hbci.passport.HBCIPassport;
 import org.kapott.hbci.passport.storage.PassportData;
+import org.kapott.hbci.tools.CryptUtils;
 import org.kapott.hbci.tools.IOUtils;
 
 /**
@@ -312,7 +327,7 @@ public class AESFormat extends AbstractFormat
     {
         try
         {
-            final String provider = this.getSecurityProvider();
+            final String provider = CryptUtils.getSecurityProvider();
             final SecretKeyFactory fac = provider != null ? SecretKeyFactory.getInstance(KEY_ALG_NAME,provider) : SecretKeyFactory.getInstance(KEY_ALG_NAME);
             final KeySpec spec = new PBEKeySpec(password, salt, CIPHER_ITERATIONS, KEY_SIZE);
             final SecretKey tmp = fac.generateSecret(spec);

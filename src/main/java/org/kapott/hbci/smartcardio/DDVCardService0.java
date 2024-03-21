@@ -1,23 +1,23 @@
-
-/*  $Id: DDVCardService0.java,v 1.1 2011/11/24 21:59:37 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.smartcardio;
 
@@ -59,7 +59,7 @@ public class DDVCardService0 extends DDVCardService
     byte[] rawData=readRecordBySFI(0x00, 0);
     ret[0]=new DDVKeyData();
     ret[0].num=rawData[0];
-    ret[0].version=rawData[4];
+    ret[0].version=(rawData[4] & 0xFF);
     ret[0].len=rawData[1];
     ret[0].alg=rawData[2];
 
@@ -67,7 +67,7 @@ public class DDVCardService0 extends DDVCardService
     rawData=readRecordBySFI(0x00, 0);
     ret[1]=new DDVKeyData();
     ret[1].num=rawData[0];
-    ret[1].version=rawData[3];
+    ret[1].version=(rawData[3] & 0xFF);
     ret[1].len=rawData[1];
     ret[1].alg=rawData[2];
     

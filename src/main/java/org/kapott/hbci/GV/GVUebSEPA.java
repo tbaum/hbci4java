@@ -1,26 +1,29 @@
-
-/*  $Id: GVUebSEPA.java,v 1.1 2011/05/04 22:37:54 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.GV;
 
+import java.util.Objects;
+
+import org.kapott.hbci.GV_Result.HBCIJobResultImpl;
 import org.kapott.hbci.manager.HBCIHandler;
 import org.kapott.hbci.manager.LogFilter;
 import org.kapott.hbci.sepa.SepaVersion;
@@ -76,7 +79,18 @@ public class GVUebSEPA extends AbstractSEPAGV
      */
     public GVUebSEPA(HBCIHandler handler, String name)
     {
-        super(handler, name);
+        this(handler, name, new HBCIJobResultImpl());
+    }
+
+    /**
+     * ct.
+     * @param handler
+     * @param name
+     * @param jobResult
+     */
+    public GVUebSEPA(HBCIHandler handler, String name, HBCIJobResultImpl jobResult)
+    {
+        super(handler, name, jobResult);
 
         addConstraint("src.bic",  "My.bic",  null, LogFilter.FILTER_MOST);
         addConstraint("src.iban", "My.iban", null, LogFilter.FILTER_IDS);
@@ -105,6 +119,10 @@ public class GVUebSEPA extends AbstractSEPAGV
         addConstraint("btg.curr",  "sepa.btg.curr",  "EUR", LogFilter.FILTER_NONE, true);
         addConstraint("usage",     "sepa.usage",     "",   LogFilter.FILTER_NONE, true);
       
+        // Siehe https://homebanking-hilfe.de/forum/topic.php?p=155881#real155881
+        if (Objects.equals(name,getLowlevelName())) // Nur bei Einzelauftraegen ausfuehren - GVUebSEPA wird in GVMultiUebSEPA ueberschrieben - und dort wird das Flag ja user-spezifisch gefuellt
+          addConstraint("batchbook", "sepa.batchbook", "0", LogFilter.FILTER_NONE);
+        
         //Constraints für die PmtInfId (eindeutige SEPA Message ID) und EndToEndId (eindeutige ID um Transaktion zu identifizieren)
         addConstraint("sepaid",    "sepa.sepaid",      getSEPAMessageId(),      LogFilter.FILTER_NONE);
         addConstraint("pmtinfid",  "sepa.pmtinfid",    getSEPAMessageId(),      LogFilter.FILTER_NONE);

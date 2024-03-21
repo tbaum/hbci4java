@@ -646,6 +646,7 @@
             </valids>
             <valids path="alg">
                 <validvalue>13</validvalue>
+                <validvalue>14</validvalue> <!-- AES-256 -->
             </valids>
             <valids path="keytype">
                 <validvalue>5</validvalue>
@@ -765,6 +766,7 @@
             <valids path="method">
                 <validvalue>DDV</validvalue>
                 <validvalue>RDH</validvalue>
+                <validvalue>RAH</validvalue>
                 <validvalue>PIN</validvalue>
             </valids>
             <valids path="version">
@@ -1182,7 +1184,24 @@
             <DE name="cantermdel" type="JN"/>
             <DE name="orderdata_required" type="JN"/>
         </DEGdef>
-        
+
+        <DEGdef id="ParDauerLastSEPAList">
+            <DE name="maxentries_allowed" type="JN"/>
+            <DE name="sepadescr" type="AN" maxsize="256" minnum="0" maxnum="9"/>
+        </DEGdef>
+
+        <DEGdef id="ParDauerLastSEPANew">
+            <DE name="allowed_types" type="AN" maxsize="64"/>
+            <DE name="minpretime" type="Num" maxsize="4"/>
+            <DE name="maxpretime" type="Num" maxsize="4"/>
+            <DE name="turnusmonths" type="Dig" maxsize="24"/>
+            <DE name="dayspermonth" type="Dig" maxsize="64"/>
+            <DE name="turnusweeks" type="Dig" maxsize="104" minnum="0"/>
+            <DE name="daysperweek" type="Dig" maxsize="7" minnum="0"/>
+            <DE name="allowed_purposecodes" type="AN" maxsize="4096" minnum="0" maxnum="1"/>
+            <DE name="sepadescr" type="AN" maxsize="256" minnum="0" maxnum="9"/>
+        </DEGdef>
+
         <DEGdef id="ParDauerEdit">
             <DE name="numtermchanges" type="Num" maxsize="1"/>
             <DE name="minpretime" type="Num" maxsize="4"/>
@@ -1384,6 +1403,14 @@
 	    	<DE name="cansingletransfer" type="JN" />
 		</DEGdef>
         
+        <DEGdef id="ParTermSammelUebSEPA">
+            <DE name="minVorlZeit" type="Num" maxsize="4"/>
+            <DE name="maxVorlZeit" type="Num" maxsize="4"/>
+            <DE name="maxnum" type="Num" maxsize="7" />
+            <DE name="needtotal" type="JN" />
+            <DE name="cansingletransfer" type="JN" />
+        </DEGdef>
+
         <DEGdef id="ParSEPAInfo">
             <DE name="cansingleaccquery" type="JN"/>
             <DE name="cannationalacc" type="JN"/>
@@ -1533,6 +1560,19 @@
                 <validvalue>0</validvalue>
                 <validvalue>1</validvalue>
                 <validvalue>2</validvalue>
+            </valids>
+        </DEGdef>
+
+        <DEGdef id="ParTAN2Step7">
+            <DE name="can1step" type="JN"/>
+            <DE name="canmultitangvs" type="JN"/>
+            <DE name="orderhashmode" type="Code" maxsize="1"/>
+            <DEG type="TAN2StepParams7" name="TAN2StepParams" maxnum="98"/>
+
+            <valids path="orderhashmode">
+                <validvalue>0</validvalue> <!-- 0: Auftrags-Hashwert nicht unterstützt -->
+                <validvalue>1</validvalue> <!-- RIPEMD-160 -->
+                <validvalue>2</validvalue> <!-- SHA-1 -->
             </valids>
         </DEGdef>
 
@@ -1891,6 +1931,85 @@
             </valids>
         </DEGdef>
 
+        <DEGdef id="TAN2StepParams7"> <!-- FinTS3.0 Security v10.07.2020 S.173 -->
+            <DE name="secfunc" type="Code" maxsize="3"/>
+            <DE name="process" type="Code" maxsize="1"/>
+            <DE name="id" type="ID"/>
+            <DE name="zkamethod_name" type="AN" maxsize="32" minnum="0" /> <!-- umbenannt "{ZKA -> DK} TAN Verfahren" -->
+            <DE name="zkamethod_version" type="AN" maxsize="10" minnum="0" />
+            <DE name="name" type="AN" maxsize="30"/>
+            <DE name="maxlentan2step" type="Num" maxsize="2" minnum="0"/> <!-- leer bei DK TAN "Decoupled" -->
+            <DE name="tanformat" type="Code" maxsize="1" minnum="0"/> <!-- leer bei DK TAN "Decoupled" -->
+            <DE name="inputinfo" type="AN" maxsize="30"/>
+            <DE name="maxleninput2step" type="Num" maxsize="4"/>
+            <DE name="canmultitan" type="JN"/>
+            <DE name="cantandelay" type="Code" maxsize="1"/>
+            <DE name="canstorno" type="JN"/>
+            <DE name="needsmsaccount" type="Code" maxsize="1"/>
+            <DE name="needorderaccount" type="Code" maxsize="1"/>
+            <DE name="needchallengeklass" type="JN"/>
+            <DE name="ischallengestructured" type="JN"/>
+            <DE name="initmode" type="Code"/>
+            <DE name="needtanmedia" type="Code"/>
+            <DE name="need_hhducresponse" type="JN"/>
+            <DE name="nofactivetanmedia" type="Num" maxsize="1" minnum="0"/>
+
+            <!-- region neue Parameter (nur bei DK TAN "Decoupled*" relevant) -->
+            <!-- Maximale Anzahl Statusabfragen -->
+            <!-- Gibt die maximale Anzahl der Statusabfragen mit TAN-Prozess=S
+                 beim Decoupled-Verfahren an. Wird haeufiger abgefragt, so kann
+                 dies vom Kreditinstitut analog einer TAN-Fehleingabe gewertet
+                 werden. Ist das Feld mit 0 belegt, koennen unendlich viele
+                 Abfragen getaetigt werden. -->
+            <DE name="decoupled_max_status_requests" type="Num" maxsize="3" minnum="0"/>
+            <!-- Wartezeit (in Sekunden) vor erster Statusabfrage -->
+            <DE name="decoupled_time_before_first_status_request" type="Num" maxsize="3" minnum="0"/>
+            <!-- Wartezeit (in Sekunden) vor naechster Statusabfrage -->
+            <DE name="decoupled_time_before_next_status_request" type="Num" maxsize="3" minnum="0"/>
+            <!-- Manuelle Bestaetigung moeglich -->
+            <!-- Hiermit wird mitgeteilt, ob der Kunde in Verbindung mit zeit-
+                 gesteuerten automatisierten Abfragen durch das Kundenprodukt
+                 waehrend der Wartezeit im Kundenprodukt auch manuell bestaetigen
+                 kann, dass er kurz zuvor eine Sicherheitsfreigabe auf einem
+                 anderen Geraet erteilt hat. -->
+            <DE name="decoupled_manual_ack_allowed" type="JN"/>
+            <!-- Automatisierte Statusabfragen erlaubt -->
+            <!-- Hiermit wird festgelegt, ob das Kundenprodukt automatisierten
+                 Statusabfragen im Decoupled-Verfahren ermoeglicht oder, ob der
+                 Kunde die Freigabe des Auftrags auf seinem anderen Geraet
+                 manuell im Kundenprodukt bestaetigen soll. -->
+            <DE name="decoupled_auto_status_request_allowed" type="JN"/>
+            <!-- endregion -->
+
+            <valids path="process">
+                <validvalue>1</validvalue>
+                <validvalue>2</validvalue>
+            </valids>
+            <valids path="zkamethod_name"> <!-- siehe S. 123 -->
+                <validvalue>HHD</validvalue> <!-- [HHD], [HHD-Belegung] -->
+                <validvalue>HHDUC</validvalue> <!-- [HHD], [HHD-Belegung] -->
+                <validvalue>HHDOPT1</validvalue> <!-- [HHD], [HHD-Belegung], [HHD-Erweiterung] -->
+                <validvalue>mobileTAN</validvalue>
+                <!-- neu mit Version 7 -->
+                <validvalue>App</validvalue> <!-- App-basierte TAN-Verfahren -->
+                <validvalue>Decoupled</validvalue> <!-- Decoupled-Verfahren -->
+                <validvalue>DecoupledPush</validvalue> <!-- Decoupled-Verfahren mit Push-Infrastruktur -->
+            </valids>
+            <valids path="tanformat">
+                <validvalue>1</validvalue> <!-- numerisch -->
+                <validvalue>2</validvalue> <!-- alphanumerisch -->
+            </valids>
+            <valids path="needsmsaccount">
+                <validvalue>0</validvalue> <!-- SMS-Abbuchungskonto darf nicht angegeben werden -->
+                <validvalue>1</validvalue> <!-- ... kann angegeben werden -->
+                <validvalue>2</validvalue> <!-- ... muss angegeben werden -->
+            </valids>
+            <valids path="needorderaccount"> <!-- Wert "1" nicht erlaubt -->
+                <validvalue>0</validvalue> <!-- Auftraggeberkonto darf nicht angegeben werden -->
+                <validvalue>2</validvalue> <!-- Auftraggeberkonto muss angegeben werden, wenn im Geschaeftsvorfall enthalten -->
+            </valids>
+        </DEGdef>
+
         <DEGdef id="TANInfo">
             <DE name="usagecode" type="Code" maxsize="2"/>
             <DE name="usagetxt" type="AN" maxsize="99" minnum="0"/>
@@ -2018,7 +2137,7 @@
         <DEGdef id="TANMediaInfo5">
             <DE name="mediacategory" type="AN" maxsize="1"/>
             <DE name="status" type="Code" maxsize="1"/>
-            <DE name="secfunc" type="Code" maxsize="3"/>
+            <DE name="secfunc" type="Code" maxsize="3" minnum="0"/>
             <DE name="cardnumber" type="ID" minnum="0"/>
             <DE name="cardseqnumber" type="ID" minnum="0"/>
             <DE name="cardtype" type="Num" maxsize="2" minnum="0"/>
@@ -2040,6 +2159,7 @@
                 <validvalue>M</validvalue>
                 <validvalue>S</validvalue>
                 <validvalue>A</validvalue>
+                <validvalue>B</validvalue>
             </valids>
             <valids path="status">
                 <validvalue>1</validvalue>
@@ -4722,7 +4842,7 @@
             <value path="SegHead.version">6</value>
         </SEGdef>
 
-        <SEGdef id="SaldoSEPA7"> <!-- 3.0 -->
+        <SEGdef id="Saldo7"> <!-- 3.0 -->
             <DEG type="SegHeadUser" name="SegHead"/>
             <DEG type="KTVInt" name="KTV"/>
             <DE name="allaccounts" type="JN"/>
@@ -4732,7 +4852,7 @@
             <value path="SegHead.code">HKSAL</value>
             <value path="SegHead.version">7</value>
         </SEGdef>
-        <SEGdef id="SaldoSEPARes7"> 
+        <SEGdef id="SaldoRes7">
             <DEG type="SegHeadInst" name="SegHead"/>
             <DEG type="KTVInt" name="KTV"/>
             <DE name="kontobez" type="AN" maxsize="30"/>
@@ -4749,7 +4869,7 @@
             <value path="SegHead.code">HISAL</value>
             <value path="SegHead.version">7</value>
         </SEGdef>
-        <SEGdef id="SaldoSEPAPar7">
+        <SEGdef id="SaldoPar7">
             &GVP2;
             
             &SecClassValids;
@@ -4911,6 +5031,34 @@
             <value path="SegHead.version">1</value>
         </SEGdef>
         
+        <SEGdef id="TermSammelUebSEPA1">
+            <DEG type="SegHeadUser" name="SegHead" />
+            <DEG type="KTVInt" name="My" />
+            <DEG type="BTG" name="Total" minnum="0" />
+            <DE type="JN" name="singletransfers" minnum="0" />
+            <DE type="AN" name="sepadescr" maxsize="256" />
+            <DE type="Bin" name="sepapain" maxsize="0" />
+
+            <value path="SegHead.code">HKCME</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
+        <SEGdef id="TermSammelUebSEPARes1">
+            <DEG type="SegHeadInst" name="SegHead"/>
+            <DE name="orderid" type="AN" maxsize="99" minnum="0"/>
+
+            <value path="SegHead.code">HICME</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
+        <SEGdef id="TermSammelUebSEPAPar1">
+            &GVP2;
+            <DEG type="ParTermSammelUebSEPA"/>
+
+            &SecClassValids;
+
+            <value path="SegHead.code">HICMES</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
+
         <SEGdef id="SammelLastSEPA1"> <!-- 3.0 -->
             <DEG type="SegHeadUser" name="SegHead" />
 	        <DEG type="KTVInt" name="My" />
@@ -5429,6 +5577,72 @@
             <value path="SegHead.version">6</value>
         </SEGdef>
         <!--  END HKTAN 6 -->
+
+
+        <!--  BEGIN HKTAN 7 (FinTS3.0 Security v10.07.2020 Kapitel B.5.2) -->
+        <SEGdef id="TAN2Step7" needsRequestTag="1"> <!-- S.64 -->
+            <DEG type="SegHeadUser" name="SegHead"/>
+            <DE name="process" type="Code" maxsize="1"/>
+            <DE name="ordersegcode" type="AN" maxsize="6" minnum="0"/>
+            <DEG name="OrderAccount" type="KTVInt" minnum="0" />
+            <DE name="orderhash" type="Bin" maxsize="256" minnum="0"/>
+            <DE name="orderref" type="AN" maxsize="35" minnum="0"/>
+            <DE name="notlasttan" type="JN" minnum="0"/>
+            <DE name="storno" type="JN" minnum="0"/>
+            <DEG name="SMSAccount" type="KTV3" minnum="0" />
+            <DE name="challengeklass" type="Num" maxsize="2" minnum="0"/>
+            <DEG name="ChallengeKlassParams" type="ChallengeKlassParams" minnum="0" />
+            <DE name="tanmedia" type="AN" maxsize="32" minnum="0"/>
+            <DEG name="HHDUCAnswer" type="HHDUCAnswer" minnum="0" />
+
+            <valids path="process">
+                <validvalue>1</validvalue>
+                <validvalue>2</validvalue>
+                <validvalue>3</validvalue>
+                <validvalue>4</validvalue>
+                <!-- TAN-Prozess=S kann nur nach dem ersten Schritt auftreten.
+                     Er dient im Decoupled-Verfahren der Statusabfrage der vom
+                     Kunden zu taetigenden Sicherheitsfreigabe auf einem
+                     anderen Geraet mittels HKTAN. (S. 160) -->
+                <validvalue>S</validvalue>
+            </valids>
+
+            <value path="SegHead.code">HKTAN</value>
+            <value path="SegHead.version">7</value>
+        </SEGdef>
+        <SEGdef id="TAN2StepRes7"> <!-- S. 67 -->
+            <DEG type="SegHeadInst" name="SegHead"/>
+            <DE name="process" type="Code" maxsize="1"/>
+            <DE name="orderhash" type="Bin" maxsize="256" minnum="0"/>
+            <DE name="orderref" type="AN" maxsize="35" minnum="0"/>
+            
+            <!-- Hier kann "nochallenge" drin stehen. Dann ignorieren. Sonst dem User anzeigen. Kann Infos von der Bank enthalten. -->
+            <DE name="challenge" type="AN" maxsize="2048" minnum="0"/>
+            <DE name="challenge_hhd_uc" type="Bin" maxsize="0" minnum="0" />
+            <DEG type="ChallengeValidity" minnum="0"/>
+            <DE name="tanmedia" type="AN" maxsize="32" minnum="0"/>
+
+            <valids path="process">
+                <validvalue>1</validvalue>
+                <validvalue>2</validvalue>
+                <validvalue>3</validvalue>
+                <validvalue>4</validvalue>
+                <validvalue>S</validvalue>
+            </valids>
+
+            <value path="SegHead.code">HITAN</value>
+            <value path="SegHead.version">7</value>
+        </SEGdef>
+        <SEGdef id="TAN2StepPar7"> <!-- S. 69 -->
+            &GVP2;
+            <DEG type="ParTAN2Step7" name="ParTAN2Step"/>
+
+            &SecClassValids;
+
+            <value path="SegHead.code">HITANS</value>
+            <value path="SegHead.version">7</value>
+        </SEGdef>
+        <!--  END HKTAN 7 -->
 
 
         <!--  macemmi 2012-02-20 BEGIN HKTAB -->
@@ -6259,6 +6473,58 @@
             <value path="SegHead.version">1</value>
         </SEGdef>
 
+        <!-- BEGIN SEPA-Instant aka 'SEPA-Instant Payment Zahlung' -->
+        <!-- Request -->
+        <SEGdef id="InstUebSEPA1">
+            <DEG type="SegHeadUser" name="SegHead"/>
+            <DEG type="KTVInt" name="My"/>
+            <DE name="sepadescr" type="AN" maxsize="256"/>
+            <DE name="sepapain" type="Bin" maxsize="0"/>
+
+            <value path="SegHead.code">HKIPZ</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
+
+        <!-- Response -->
+        <SEGdef id="InstUebSEPARes1">
+            <DEG type="SegHeadInst" name="SegHead"/>
+            <DE name="orderid" type="AN" maxsize="99" minnum="0"/>
+            <DE name="ccode" type="Code" maxsize="1" minnum="0"/>
+            <DE name="orderstatus" type="Code" maxsize="1" minnum="0"/>
+
+            <valids path="ccode">
+                <validvalue>1</validvalue>
+                <validvalue>2</validvalue>
+                <validvalue>3</validvalue>
+                <validvalue>4</validvalue>
+            </valids>
+            <valids path="orderstatus">
+                <validvalue>1</validvalue>
+                <validvalue>2</validvalue>
+                <validvalue>3</validvalue>
+                <validvalue>4</validvalue>
+                <validvalue>5</validvalue>
+                <validvalue>6</validvalue>
+                <validvalue>7</validvalue>
+                <validvalue>8</validvalue>
+                <validvalue>9</validvalue>
+            </valids>
+
+            <value path="SegHead.code">HIIPZ</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
+
+        <!-- BPD -->
+        <SEGdef id="InstUebSEPAPar1">
+            &GVP2;
+            <DEG type="ParUmbSepa" name="ParUmbSepa"/>
+            &SecClassValids;
+
+            <value path="SegHead.code">HIIPZS</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
+        <!-- END SEPA-Instant aka 'SEPA-Instant Payment Zahlung' -->
+
         <!-- BEGIN SEPA-Umbuchung aka 'SEPA-Überweisung auf ein Empfängerkonto' -->
         <!-- Request -->
         <SEGdef id="UmbSEPA1">
@@ -6604,7 +6870,69 @@
             <value path="SegHead.code">HICDBS</value>
             <value path="SegHead.version">1</value>
         </SEGdef>
-        
+
+        <SEGdef id="DauerLastSEPAList1">
+            <DEG type="SegHeadUser" name="SegHead"/>
+            <DEG type="KTVInt" name="My"/>
+            <DE name="sepadescr" type="AN" maxsize="256" minnum="1" maxnum="99"/>
+            <DE name="orderid" type="AN" maxsize="99" minnum="0"/>
+            <DE name="maxentries" type="Num" maxsize="4" minnum="0"/>
+            <DE name="offset" type="AN" maxsize="35" minnum="0"/>
+
+            <value path="SegHead.code">HKDDB</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
+        <SEGdef id="DauerLastSEPAListRes1">
+            <DEG type="SegHeadInst" name="SegHead"/>
+            <DEG type="KTVInt" name="My"/>
+            <DE name="sepadescr" type="AN" maxsize="256" minnum="0"/>
+            <DE name="sepapain" type="Bin" maxsize="0"/>
+            <DE name="orderid" type="AN" maxsize="99" minnum="0"/>
+            <DEG type="DauerDetails"/>
+            <DEG type="Aussetzung3" name="Aussetzung" minnum="0"/>
+            <DE name="canchange" type="JN" minnum="0"/>
+            <DE name="canskip" type="JN" minnum="0"/>
+            <DE name="candel" type="JN" minnum="0"/>
+
+            <value path="SegHead.code">HIDDB</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
+        <SEGdef id="DauerLastSEPAListPar1">
+            &GVP2;
+            <DEG type="ParDauerLastSEPAList" />
+
+            &SecClassValids;
+
+            <value path="SegHead.code">HIDDBS</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
+
+        <SEGdef id="DauerLastSEPANew1">
+            <DEG type="SegHeadUser" name="SegHead"/>
+            <DEG type="KTVInt" name="My"/>
+            <DE name="sepadescr" type="AN" maxsize="256"/>
+            <DE name="sepapain" type="Bin" maxsize="0"/>
+            <DEG type="DauerDetails"/>
+
+            <value path="SegHead.code">HKDDE</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
+        <SEGdef id="DauerLastSEPANewRes1">
+            <DEG type="SegHeadInst" name="SegHead"/>
+            <DE name="orderid" type="AN" maxsize="99" minnum="0"/>
+
+            <value path="SegHead.code">HIDDE</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
+        <SEGdef id="DauerLastSEPANewPar1">
+            &GVP2;
+            <DEG type="ParDauerLastSEPANew" />
+
+            &SecClassValids;
+
+            <value path="SegHead.code">HIDDES</value>
+            <value path="SegHead.version">1</value>
+        </SEGdef>
         
         <SEGdef id="Umb1"> <!-- 2.2 -->
             &SingleInlandUser3;
@@ -7547,6 +7875,8 @@
             <SEG type="DauerList4" minnum="0"/>
             <SEG type="DauerList5" minnum="0"/>
             <SEG type="DauerSEPAList1" minnum="0"/>
+            <SEG type="DauerLastSEPAList1" minnum="0"/>
+            <SEG type="DauerLastSEPANew1" minnum="0"/>
             <SEG type="DauerNew2" minnum="0"/>
             <SEG type="DauerNew3" minnum="0"/>
             <SEG type="DauerNew4" minnum="0"/>
@@ -7569,6 +7899,7 @@
             <SEG type="InfoList2" minnum="0"/>
             <SEG type="InfoList3" minnum="0"/>
             <SEG type="InfoList4" minnum="0"/>
+            <SEG type="InstUebSEPA1" minnum="0"/>
             <SEG type="Kontoauszug1" minnum="0"/>
             <SEG type="Kontoauszug2" minnum="0"/>
             <SEG type="Kontoauszug3" minnum="0"/>
@@ -7600,7 +7931,7 @@
             <SEG type="Saldo4" minnum="0"/>
             <SEG type="Saldo5" minnum="0"/>
             <SEG type="Saldo6" minnum="0"/>
-            <SEG type="SaldoSEPA7" minnum="0"/>
+            <SEG type="Saldo7" minnum="0"/>
             <SEG type="SammelLast3" minnum="0"/>
             <SEG type="SammelLast4" minnum="0"/>
             <SEG type="SammelLast5" minnum="0"/>
@@ -7611,6 +7942,7 @@
             <SEG type="SammelUeb6" minnum="0"/>
             <SEG type="SammelUebEil1" minnum="0"/>
             <SEG type="SammelUebSEPA1" minnum="0"/>
+            <SEG type="TermSammelUebSEPA1" minnum="0"/>
             <SEG type="SammelLastSEPA1" minnum="0"/>
             <SEG type="SammelLastCOR1SEPA1" minnum="0"/>
             <SEG type="SammelLastB2BSEPA1" minnum="0"/>
@@ -7624,6 +7956,7 @@
             <SEG type="TAN2Step4" minnum="0"/>
             <SEG type="TAN2Step5" minnum="0"/>
             <SEG type="TAN2Step6" minnum="0"/>
+            <SEG type="TAN2Step7" minnum="0"/>
             <SEG type="TANListList1" minnum="0"/>
             <SEG type="TANMediaList1" minnum="0"/>
             <SEG type="TANMediaList2" minnum="0"/>
@@ -7708,6 +8041,8 @@
             <SEG type="DauerListRes4" minnum="0"/>
             <SEG type="DauerListRes5" minnum="0"/>
             <SEG type="DauerSEPAListRes1" minnum="0"/>
+            <SEG type="DauerLastSEPAListRes1" minnum="0"/>
+            <SEG type="DauerLastSEPANewRes1" minnum="0"/>
             <SEG type="DauerNewRes2" minnum="0"/>
             <SEG type="DauerNewRes3" minnum="0"/>
             <SEG type="DauerNewRes4" minnum="0"/>
@@ -7729,6 +8064,7 @@
             <SEG type="InfoListRes2" minnum="0"/>
             <SEG type="InfoListRes3" minnum="0"/>
             <SEG type="InfoListRes4" minnum="0"/>
+            <SEG type="InstUebSEPARes1" minnum="0"/>
             <SEG type="KontoauszugRes1" minnum="0"/>
             <SEG type="KontoauszugRes2" minnum="0"/>
             <SEG type="KontoauszugRes3" minnum="0"/>
@@ -7756,7 +8092,7 @@
             <SEG type="SaldoRes4" minnum="0"/>
             <SEG type="SaldoRes5" minnum="0"/>
             <SEG type="SaldoRes6" minnum="0"/>
-            <SEG type="SaldoSEPARes7" minnum="0"/>
+            <SEG type="SaldoRes7" minnum="0"/>
             <SEG type="SEPAInfoRes1" minnum="0"/>
             <SEG type="StatusRes2" minnum="0"/>
             <SEG type="StatusRes3" minnum="0"/>
@@ -7771,6 +8107,7 @@
             <SEG type="TermSammelLastListRes3" minnum="0"/>
             <SEG type="TermSammelUebRes3" minnum="0"/>
             <SEG type="TermSammelUebListRes3" minnum="0"/>
+            <SEG type="TermSammelUebSEPARes1" minnum="0"/>
             <SEG type="TermUebRes2" minnum="0"/>
             <SEG type="TermUebRes3" minnum="0"/>
             <SEG type="TermUebRes4" minnum="0"/>
@@ -7813,6 +8150,7 @@
             <SEG type="TAN2StepRes4" minnum="0"/>
             <SEG type="TAN2StepRes5" minnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0"/>
+            <SEG type="TAN2StepRes7" minnum="0"/>
         </SFdef>
         
         <SFdef id="Params">
@@ -7845,6 +8183,8 @@
             <SEG type="DauerListPar4" minnum="0"/>
             <SEG type="DauerListPar5" minnum="0"/>
             <SEG type="DauerSEPAListPar1" minnum="0"/>
+            <SEG type="DauerLastSEPAListPar1" minnum="0"/>
+            <SEG type="DauerLastSEPANewPar1" minnum="0"/>
             <SEG type="DauerNewPar2" minnum="0"/>
             <SEG type="DauerNewPar3" minnum="0"/>
             <SEG type="DauerNewPar4" minnum="0"/>
@@ -7867,6 +8207,7 @@
             <SEG type="InfoListPar2" minnum="0"/>
             <SEG type="InfoListPar3" minnum="0"/>
             <SEG type="InfoListPar4" minnum="0"/>
+            <SEG type="InstUebSEPAPar1" minnum="0"/>
             <SEG type="KontoauszugPar1" minnum="0"/>
             <SEG type="KontoauszugPar2" minnum="0"/>
             <SEG type="KontoauszugPar3" minnum="0"/>
@@ -7900,7 +8241,7 @@
             <SEG type="SaldoPar4" minnum="0"/>
             <SEG type="SaldoPar5" minnum="0"/>
             <SEG type="SaldoPar6" minnum="0"/>
-            <SEG type="SaldoSEPAPar7" minnum="0"/>
+            <SEG type="SaldoPar7" minnum="0"/>
             <SEG type="SammelLastPar3" minnum="0"/>
             <SEG type="SammelLastPar4" minnum="0"/>
             <SEG type="SammelLastPar5" minnum="0"/>
@@ -7924,6 +8265,7 @@
             <SEG type="TAN2StepPar4" minnum="0"/>
             <SEG type="TAN2StepPar5" minnum="0"/>
             <SEG type="TAN2StepPar6" minnum="0"/>
+            <SEG type="TAN2StepPar7" minnum="0"/>
             <SEG type="TANListListPar1" minnum="0"/>
             <SEG type="TANMediaListPar1" minnum="0"/>
             <SEG type="TANMediaListPar2" minnum="0"/>
@@ -7936,6 +8278,7 @@
             <SEG type="TermSammelUebPar3" minnum="0"/>
             <SEG type="TermSammelUebDelPar3" minnum="0"/>
             <SEG type="TermSammelUebListPar3" minnum="0"/>
+            <SEG type="TermSammelUebSEPAPar1" minnum="0"/>
             <SEG type="TermUebPar2" minnum="0"/>
             <SEG type="TermUebPar3" minnum="0"/>
             <SEG type="TermUebPar4" minnum="0"/>
@@ -8042,22 +8385,28 @@
             <!-- HNHBK --> <SEG type="MsgHeadUser" name="MsgHead"/>
             <!-- HKIDN --> <SEG type="Idn"/>
             <!-- HKVVB --> <SEG type="ProcPrep"/>
-            <!-- HKTAN --> <SEG type="TAN2Step6" minnum="0" maxnum="1"/> <!-- Ja, auch bei der anonymen Initialisierung darf HKTAN6 gesendet werden -->
+            
+            <!-- Ja, auch bei der anonymen Initialisierung darf HKTAN gesendet werden -->
+            <!-- HKTAN --> <SEG type="TAN2Step6" minnum="0" maxnum="1"/>
+            <!-- HKTAN --> <SEG type="TAN2Step7" minnum="0" maxnum="1"/>
             <!-- HNHBS --> <SEG type="MsgTailUser" name="MsgTail"/>
         </MSGdef>
         
         <MSGdef id="DialogInitAnonRes" dontsign="1" dontcrypt="1">
             &MsgSigHeadInst;
             
-            <!-- Das TAN2StepRes6 steht hier mehrfach, weil die Banken das nicht einheitlich an der selben Stelle senden -->
+            <!-- Das TAN2StepRes steht hier mehrfach, weil die Banken das nicht einheitlich an der selben Stelle senden -->
             <SEG type="RetGlob"/>
             <SEG type="RetSeg" minnum="0" maxnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             <SF type="BPD" minnum="0"/>
             <SF type="UPD" minnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             <SEG type="KIMsg" minnum="0" maxnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             &MsgSigTailInst;
         </MSGdef>
 
@@ -8066,6 +8415,7 @@
             <!-- HKIDN --> <SEG type="Idn"/>
             <!-- HKVVB --> <SEG type="ProcPrep"/>
             <!-- HKTAN --> <SEG type="TAN2Step6" minnum="0" maxnum="1"/>
+            <!-- HKTAN --> <SEG type="TAN2Step7" minnum="0" maxnum="1"/>
             <!-- HKISA --> <SEG type="KeyReq" minnum="0" maxnum="3"/>
             <!-- HNSHA+HNHBS --> &MsgSigTailUser;
         </MSGdef>
@@ -8075,14 +8425,75 @@
             <!-- Das TAN2StepRes6 steht hier mehrfach, weil die Banken das nicht einheitlich an der selben Stelle senden -->
             <SEG type="RetGlob"/>
             <SEG type="RetSeg" minnum="0" maxnum="0"/>
+            
+            <!-- Degussa sendet unaufgefordert HITAB, obwohl wir gar kein HKTAB gesendet haben -->
+            <SEG type="TANMediaListRes1" minnum="0" maxnum="1"/>
+            <SEG type="TANMediaListRes2" minnum="0" maxnum="1"/>
+            <SEG type="TANMediaListRes3" minnum="0" maxnum="1"/>
+            <SEG type="TANMediaListRes4" minnum="0" maxnum="1"/>
+            <SEG type="TANMediaListRes5" minnum="0" maxnum="1"/>
+            
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             <SF type="BPD" minnum="0"/>
             <SF type="UPD" minnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             <SEG type="SendPubKey" minnum="0" maxnum="3"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             <SEG type="KIMsg" minnum="0" maxnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
+            <SEG type="SEPAInfoRes1" minnum="0" maxnum="1"/>
+            &MsgSigTailInst;
+        </MSGdef>
+
+        <MSGdef id="TanMedia">
+            &MsgSigHeadUser;
+            <SEG type="TANMediaList2" minnum="0"/>
+            <SEG type="TANMediaList3" minnum="0"/>
+            <SEG type="TANMediaList4" minnum="0"/>
+            <SEG type="TANMediaList5" minnum="0"/>
+            <SEG type="TAN2Step6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2Step7" minnum="0" maxnum="1"/>
+            &MsgSigTailUser;
+        </MSGdef>
+        <MSGdef id="TanMediaRes">
+            &MsgSigHeadInst;
+            <SEG type="RetGlob"/>
+            <SEG type="RetSeg" minnum="0" maxnum="0"/>
+            <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
+            <SEG type="TANMediaListRes2" minnum="0"/>
+            <SEG type="TANMediaListRes3" minnum="0"/>
+            <SEG type="TANMediaListRes4" minnum="0"/>
+            <SEG type="TANMediaListRes5" minnum="0"/>
+            <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
+            <SEG type="KIMsg" minnum="0" maxnum="0"/>
+            <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
+            &MsgSigTailInst;
+        </MSGdef>
+
+        <MSGdef id="SepaInfo">
+            &MsgSigHeadUser;
+            <SEG type="SEPAInfo1" minnum="0"/>
+            <SEG type="TAN2Step6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2Step7" minnum="0" maxnum="1"/>
+            &MsgSigTailUser;
+        </MSGdef>
+        <MSGdef id="SepaInfoRes">
+            &MsgSigHeadInst;
+            <SEG type="RetGlob"/>
+            <SEG type="RetSeg" minnum="0" maxnum="0"/>
+            <SEG type="SEPAInfoRes1" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
+            <SEG type="KIMsg" minnum="0" maxnum="0"/>
+            <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             &MsgSigTailInst;
         </MSGdef>
 
@@ -8091,6 +8502,7 @@
             <!-- HKIDN --> <SEG type="Idn"/>
             <!-- HKVVB --> <SEG type="ProcPrep"/>
             <!-- HKTAN --> <SEG type="TAN2Step6" minnum="0" maxnum="1"/>
+            <!-- HKTAN --> <SEG type="TAN2Step7" minnum="0" maxnum="1"/>
             <!-- HKISA --> <SEG type="KeyReq" minnum="0" maxnum="3"/>
             <!-- HKSYN --> <SEG type="Sync"/>
             <!-- HNSHA+HNHBS --> &MsgSigTailUser;
@@ -8098,19 +8510,23 @@
         <MSGdef id="SynchRes">
             &MsgSigHeadInst;
             
-            <!-- Das TAN2StepRes6 steht hier mehrfach, weil die Banken das nicht einheitlich an der selben Stelle senden -->
+            <!-- Das TAN2StepRes steht hier mehrfach, weil die Banken das nicht einheitlich an der selben Stelle senden -->
             <SEG type="RetGlob"/>
             <SEG type="RetSeg" minnum="0" maxnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             <SF type="BPD" minnum="0"/>
             <SF type="UPD" minnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             <SEG type="SendPubKey" minnum="0" maxnum="3"/>
             <SEG type="SyncRes3" name="SyncRes" minnum="0"/>
             <SEG type="SyncRes4" name="SyncRes" minnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             <SEG type="KIMsg" minnum="0" maxnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             &MsgSigTailInst;
         </MSGdef>
 
@@ -8125,16 +8541,28 @@
             <!-- Das TAN2StepRes6 steht hier mehrfach, weil die Banken das nicht einheitlich an der selben Stelle senden -->
             <SEG type="RetGlob"/>
             <SEG type="RetSeg" minnum="0" maxnum="0"/>
+            
+            <!-- Degussa sendet unaufgefordert HITAB, obwohl wir gar kein HKTAB gesendet haben -->
+            <SEG type="TANMediaListRes1" minnum="0" maxnum="1"/>
+            <SEG type="TANMediaListRes2" minnum="0" maxnum="1"/>
+            <SEG type="TANMediaListRes3" minnum="0" maxnum="1"/>
+            <SEG type="TANMediaListRes4" minnum="0" maxnum="1"/>
+            <SEG type="TANMediaListRes5" minnum="0" maxnum="1"/>
+            
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             <SF type="BPD" minnum="0"/>
             <SF type="UPD" minnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             <SEG type="SendPubKey" minnum="0" maxnum="3"/>
             <SEG type="SyncRes3" name="SyncRes" minnum="0"/>
             <SEG type="SyncRes4" name="SyncRes" minnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             <SEG type="KIMsg" minnum="0" maxnum="0"/>
             <SEG type="TAN2StepRes6" minnum="0" maxnum="1"/>
+            <SEG type="TAN2StepRes7" minnum="0" maxnum="1"/>
             &MsgSigTailInst;
         </MSGdef>
 

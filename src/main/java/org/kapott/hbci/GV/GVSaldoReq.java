@@ -1,23 +1,23 @@
-
-/*  $Id: GVSaldoReq.java,v 1.1 2011/05/04 22:37:53 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.GV;
 
@@ -50,15 +50,53 @@ public class GVSaldoReq
     {
         this(handler,getLowlevelName());
 
-        addConstraint("my.country","KTV.KIK.country","DE", LogFilter.FILTER_NONE);
-        addConstraint("my.blz","KTV.KIK.blz",null, LogFilter.FILTER_MOST);
-        addConstraint("my.number","KTV.number",null, LogFilter.FILTER_IDS);
-        addConstraint("my.subnumber","KTV.subnumber","", LogFilter.FILTER_MOST);
-        addConstraint("my.curr","curr","EUR", LogFilter.FILTER_NONE);
+        int version = -1;
+        try
+        {
+          version = Integer.parseInt(this.getSegVersion());
+        }
+        catch (Exception e)
+        {
+          HBCIUtils.log(e);
+        }
+
+        boolean sepa = version >= 7;
+        boolean nat = this.canNationalAcc(handler);
+
+        if (sepa)
+        {
+          addConstraint("my.bic","KTV.bic",  null, LogFilter.FILTER_MOST);
+          addConstraint("my.iban","KTV.iban",null, LogFilter.FILTER_IDS);
+        }
+
+        // Die DE mit der Währung wurde in HKSAL5 entfernt
+        if (version < 5)
+          addConstraint("my.curr","curr","EUR", LogFilter.FILTER_NONE);
+
+        if (nat || !sepa)
+        {
+          addConstraint("my.country","KTV.KIK.country","DE", LogFilter.FILTER_NONE);
+          addConstraint("my.blz","KTV.KIK.blz",null, LogFilter.FILTER_MOST);
+          addConstraint("my.number","KTV.number",null, LogFilter.FILTER_IDS);
+          addConstraint("my.subnumber","KTV.subnumber","", LogFilter.FILTER_MOST);
+        }
+        
         addConstraint("dummyall","allaccounts", "N", LogFilter.FILTER_NONE);
         addConstraint("maxentries","maxentries","", LogFilter.FILTER_NONE);
     }
     
+    /**
+     * @see org.kapott.hbci.GV.HBCIJobImpl#redoAllowed()
+     */
+    @Override
+    protected boolean redoAllowed()
+    {
+        return true;
+    }
+    
+    /**
+     * @see org.kapott.hbci.GV.HBCIJobImpl#extractResults(org.kapott.hbci.status.HBCIMsgStatus, java.lang.String, int)
+     */
     protected void extractResults(HBCIMsgStatus msgstatus,String header,int idx)
     {
         Properties result=msgstatus.getData();

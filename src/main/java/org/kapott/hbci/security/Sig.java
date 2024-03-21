@@ -1,23 +1,23 @@
-
-/*  $Id: Sig.java,v 1.2 2012/03/27 21:33:13 willuhn Exp $
-
-    This file is part of HBCI4Java
-    Copyright (C) 2001-2008  Stefan Palme
-
-    HBCI4Java is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    HBCI4Java is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
+/**********************************************************************
+ *
+ * This file is part of HBCI4Java.
+ * Copyright (c) 2001-2008 Stefan Palme
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ **********************************************************************/
 
 package org.kapott.hbci.security;
 
@@ -335,29 +335,28 @@ public final class Sig
                         byte[] hashresult=passport.hash(hashdata.getBytes(Comm.ENCODING));
                         byte[] signature=passport.sign(hashresult);
 
-                        if (passport.needUserSig()) {
+                        if (passport.needUserSig())
+                        {
                             String pintan=new String(signature,Comm.ENCODING);
                             int pos=pintan.indexOf("|");
-                            
-                            if (pos!=-1) {
-                                // wenn überhaupt eine signatur existiert
-                                // (wird für server benötigt)
-                                String pin=pintan.substring(0,pos);
-                                msg.propagateValue(sigtail.getPath()+".UserSig.pin",pin,
-                                        SyntaxElement.DONT_TRY_TO_CREATE,
-                                        SyntaxElement.DONT_ALLOW_OVERWRITE);
-                                
-                                if (pos<pintan.length()-1) {
-                                    String tan=pintan.substring(pos+1);
-                                    msg.propagateValue(sigtail.getPath()+".UserSig.tan",tan,
-                                            SyntaxElement.DONT_TRY_TO_CREATE,
-                                            SyntaxElement.DONT_ALLOW_OVERWRITE);
+
+                            // PIN/TAN-Signatur
+                            if (pos!=-1)
+                            {
+                                String pin = pintan.substring(0,pos);
+                                msg.propagateValue(sigtail.getPath()+".UserSig.pin",pin,SyntaxElement.DONT_TRY_TO_CREATE,SyntaxElement.DONT_ALLOW_OVERWRITE);
+
+                                // TAN nur senden, wenn vorhanden. Andernfalls lassen wir das DE komplett weg
+                                if (pos<pintan.length()-1)
+                                {
+                                  String tan = pintan.substring(pos+1);
+                                  msg.propagateValue(sigtail.getPath()+".UserSig.tan",tan,SyntaxElement.DONT_TRY_TO_CREATE,SyntaxElement.DONT_ALLOW_OVERWRITE);
                                 }
                             }
-                        } else { // normale signatur
-                            msg.propagateValue(sigtail.getPath()+".sig","B"+new String(signature,Comm.ENCODING),
-                                    SyntaxElement.DONT_TRY_TO_CREATE,
-                                    SyntaxElement.DONT_ALLOW_OVERWRITE);
+                        }
+                        else
+                        {
+                            msg.propagateValue(sigtail.getPath()+".sig","B"+new String(signature,Comm.ENCODING),SyntaxElement.DONT_TRY_TO_CREATE,SyntaxElement.DONT_ALLOW_OVERWRITE);
                         }
                         
                         msg.validate();

@@ -1,8 +1,11 @@
 ## Vorab
 
-Dies ist ein aktuell gepflegter Fork von [HBCI4Java](http://hbci4java.kapott.org/),
-welcher u.a. in [Hibiscus](http://www.willuhn.de/products/hibiscus) und
-[Pecunia-Banking](http://www.pecuniabanking.de/) zum Einsatz kommt.
+Dies ist die offizielle Quelle von HBCI4Java, welches u.a. in [Hibiscus](http://www.willuhn.de/products/hibiscus) zum Einsatz kommt.
+
+## Versionshinweis
+
+- Version 3.x von HBCI4Java verwendet Java EE (javax.*).
+- Version 4.x von HBCI4Java verwendet Jakarta EE (jakarta.*).
 
 ## Kontakt
 
@@ -23,7 +26,8 @@ Seither wurden umfangreiche neue Features hinzugefügt wie etwa:
 - Support für alle aktuellen SEPA-PAIN-Versionen
 - Unterstützung von PC/SC-Kartenlesern via javax.smartcardio API
 - Eine aktuelle Bankenliste (mit BLZ, Server-Adresse, HBCI-Version,...)
-- Die Unterstützung der neuen TAN-Verfahren (smsTAN, photoTAN, chipTAN - incl. Implementierung des HHD-Standards mit Flicker-Code)
+- Unterstützung der neuen TAN-Verfahren (smsTAN, photoTAN, chipTAN - incl. Implementierung des HHD-Standards mit Flicker-Code)
+- Unterstützung von RAH10-Schlüsseldateien
 
 ## Lizenz
 
@@ -88,6 +92,10 @@ Du benötigst:
 - Den ausgecheckten Quellcode von HBCI4Java per GIT (siehe oben)
 
 Klicke im Menu von Eclipse auf "File->Import..." und wähle "Maven->Existing Maven Projects". Folge den Anweisungen des Assistenten. Klicke anschließend mit der rechten Maustaste im "Package Explorer" oder "Navigator" auf das Projekt und wähle im Contextmenu "Maven->Update Project...".
+
+Falls danach noch Compile-Fehler auftreten, ggf. die JAXB-Sourcen einmal manuell aus den XML-Schema-Dateien generieren:
+
+    $> mvn generate-sources
 
 
 ## Unit-Tests
